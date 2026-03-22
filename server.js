@@ -1,3 +1,9 @@
+const buffer = require('buffer');
+if (typeof buffer.SlowBuffer === 'undefined') {
+    buffer.SlowBuffer = class {}; 
+    buffer.SlowBuffer.prototype = {};
+}
+
 const express = require('express');
 const app = express();
 const path = require('path');
