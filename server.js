@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3500;
 // Connect to MongoDB
 mongoose.set('strictQuery', false);
 connectBixDB();
-
+ 
 // Handle options credentials check - before CORS!
 // and fetch cookies credentials requirement
 app.use(credentials);
