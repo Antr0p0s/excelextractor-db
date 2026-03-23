@@ -3,4 +3,4 @@ const allowedOrigins = [
     'https://excelextractor.randomwebserver.eu'
 ];
 
-module.exports = allowedOrigins;
+module.exports = allowedOrigins; 

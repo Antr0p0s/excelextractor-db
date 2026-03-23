@@ -1,7 +1,7 @@
 const Set = require('../model/Set');
 
 const createNewSet = async (req, res) => {
-    if (!req?.body?.name || !req?.id) {
+    if (!req?.body?.name || !req?.id || !req?.body?.category) {
         return res.status(400).json({ 'message': 'Missing data' });
     }
 
@@ -9,6 +9,7 @@ const createNewSet = async (req, res) => {
         const result = await Set.create({
             name: req.body.name,
             ownerId: req.id,
+            category: req.body.category,
             requirements: []
         });
         res.status(201).json(result);
@@ -49,6 +50,7 @@ const updateSet = async (req, res) => {
         // Update fields provided in body
         if (req.body.name) foundSet.name = req.body.name;
         if (req.body.requirements) foundSet.requirements = req.body.requirements;
+        if (req.body.category) foundSet.category = req.body.category
 
         const updatedSet = await foundSet.save();
         res.status(200).json(updatedSet);
