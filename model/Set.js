@@ -10,9 +10,9 @@ const setSchema = new Schema({
         type: String,
         required: true
     },
-    category: {
+    description: {
         type: String,
-        required: true
+        required: true 
     },
     requirements: {
         type: [Object],

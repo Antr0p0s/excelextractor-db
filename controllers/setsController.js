@@ -1,7 +1,7 @@
 const Set = require('../model/Set');
 
 const createNewSet = async (req, res) => {
-    if (!req?.body?.name || !req?.id || !req?.body?.category) {
+    if (!req?.body?.name || !req?.id || !req?.body?.description) {
         return res.status(400).json({ 'message': 'Missing data' });
     }
 
@@ -9,7 +9,7 @@ const createNewSet = async (req, res) => {
         const result = await Set.create({
             name: req.body.name,
             ownerId: req.id,
-            category: req.body.category,
+            description: req.body.description,
             requirements: []
         });
         res.status(201).json(result);
@@ -61,8 +61,43 @@ const updateSet = async (req, res) => {
     }
 }
 
+const deleteSet = async (req, res) => {
+    const { id } = req.body;
+    const isAdmin = req.roles?.includes(5150); // Admin role
+
+    if (!id) {
+        return res.status(400).json({ message: "Set ID required" });
+    }
+
+    if (!req?.id) {
+        return res.status(400).json({ message: "Missing user ID" });
+    }
+
+    try {
+        const foundSet = await Set.findById(id);
+
+        if (!foundSet) {
+            return res.status(404).json({ message: "Set not found" });
+        }
+
+        // 🔐 Authorization check (same as update)
+        if (foundSet.ownerId !== req.id && !isAdmin) {
+            return res.status(403).json({ message: "Unauthorized to delete this set" });
+        }
+
+        await foundSet.deleteOne();
+
+        res.status(200).json({ message: "Set deleted successfully" });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 module.exports = {
     createNewSet,
     getPersonalSets,
-    updateSet
+    updateSet,
+    deleteSet
 }

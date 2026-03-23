@@ -6,6 +6,7 @@ const verifyRoles = require('../../middleware/verifyRoles');
 
 router.route('/')
     .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), setsController.getPersonalSets)
+    .delete(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), setsController.deleteSet)
 
 router.route('/new')
     .post(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), setsController.createNewSet)
