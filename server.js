@@ -53,6 +53,7 @@ app.use('/public/logout', require('./routes/logout'));
 
 // private routes --------------------------------------------
 app.use(verifyJWT);
+app.use('/private/change-password', require('./routes/private/user'));
 app.use('/private/sets', require('./routes/private/sets'));
 
 
