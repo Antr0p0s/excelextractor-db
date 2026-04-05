@@ -12,6 +12,7 @@ const userSchema = new Schema({
     },
     roles: {
         User: Number,
+        QuizUser: Number,
         Admin: Number
     },
     password: {

@@ -55,6 +55,7 @@ app.use('/public/logout', require('./routes/logout'));
 app.use(verifyJWT);
 app.use('/private/change-password', require('./routes/private/user'));
 app.use('/private/sets', require('./routes/private/sets'));
+app.use('/private/pubquiz', require('./routes/private/pubquiz'))
 
 
 

@@ -1,4 +1,4 @@
-const Set = require('../model/Set');
+const Set = require('../../model/Set');
 
 const createNewSet = async (req, res) => {
     if (!req?.body?.name || !req?.id || !req?.body?.description) {

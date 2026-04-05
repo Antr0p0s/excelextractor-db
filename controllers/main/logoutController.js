@@ -1,5 +1,5 @@
-const User = require('../model/User');
-const logEvents = require('../middleware/logEvents').logEvents;
+const User = require('../../model/User');
+const logEvents = require('../../middleware/logEvents').logEvents;
 
 
 const handleLogout = async (req, res) => {

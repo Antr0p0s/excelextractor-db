@@ -10,6 +10,8 @@
   "author": "Dave Gray",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1023.0",
+    "@aws-sdk/s3-request-presigner": "^3.1023.0",
     "bcrypt": "^5.0.1",
     "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",
@@ -18,6 +20,8 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^8.5.1",
     "mongoose": "^9.3.0",
+    "multer": "^2.1.1",
+    "multer-s3": "^3.0.1",
     "uuid": "^8.3.2"
   },
   "devDependencies": {

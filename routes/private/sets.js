@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const setsController = require('../../controllers/setsController');
+const setsController = require('../../controllers/excel/setsController');
 const ROLES_LIST = require('../../config/roles_list');
 const verifyRoles = require('../../middleware/verifyRoles');
 
