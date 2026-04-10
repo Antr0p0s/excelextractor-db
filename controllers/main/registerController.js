@@ -43,7 +43,7 @@ const handleNewUser = async (req, res) => {
 }
 
 const getRoles = (type) => {
-    if (type === 'excel') return { ExcelUser: 2001 }
+    if (type === 'excel') return { User: 2001 }
     if (type === 'quiz') return { QuizUser: 2002 }
 }
 
