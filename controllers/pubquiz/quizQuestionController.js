@@ -160,7 +160,7 @@ const createNewQuestion = async (req, res) => {
             media: media // Now contains all 4 potential files
         };
 
-        if (type === 'open') {
+        if (type === 'open' || type === 'bidding') {
             questionObject.defaultPoints = Number(defaultPoints) || 0;
             questionObject.correctAnswer = [correctAnswer];
         } else if (type === 'multiple') {

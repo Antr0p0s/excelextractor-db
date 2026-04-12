@@ -89,6 +89,9 @@ router.route('/categories')
 router.route('/quiz/start')
     .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), pubquizController.startQuiz)
 
+router.route('/quiz/pause-audio')
+    .post(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), pubquizController.pauseAudio)
+
 router.route('/quiz/stream')
     .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.QuizUser, ROLES_LIST.Admin), pubquizController.streamQuiz)
 

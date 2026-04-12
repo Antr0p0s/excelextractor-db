@@ -68,6 +68,7 @@ const getFile = async (req, res) => {
             Bucket: process.env.S3_BUCKET_NAME_STAGE,
             Key: path, // Use the key, not the full URL
         });
+        console.log(path)
 
         // Generate a URL that expires in 60 minutes (3600 seconds)   (jk 15 min)     
         const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 * 15 });

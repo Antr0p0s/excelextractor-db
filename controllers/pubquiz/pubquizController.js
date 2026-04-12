@@ -24,8 +24,6 @@ const quizzes = {}
 const startQuiz = async (req, res) => {
     const hostId = req.id;
 
-    console.log("Host connected:", hostId);
-
     // ✅ Create quiz if it doesn't exist
     if (!quizzes[hostId]) {
         const quizId = generateQuizId();
@@ -115,8 +113,6 @@ const streamQuiz = (req, res) => {
         // ✅ Store connection
         quiz.connections[connectionType].push(res);
 
-        console.log(`${connectionType} connected →`, req.id);
-
         // ✅ Send initial data
         res.write(
             `data: ${JSON.stringify({
@@ -172,8 +168,6 @@ const streamQuiz = (req, res) => {
 
         // ✅ Handle disconnect
         req.on("close", () => {
-            console.log(`${connectionType} disconnected →`, req.id);
-
             quiz.connections[connectionType] =
                 quiz.connections[connectionType].filter((c) => c !== res);
 
@@ -224,6 +218,34 @@ const lockQuestion = async (req, res) => {
         });
 
         res.status(200).json({ message: "Answer revealed to all displays" });
+    } catch (err) {
+        console.error("Error in showAnswer:", err);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
+const pauseAudio = async (req, res) => {
+    try {
+        const hostId = req.id;
+
+        // Make sure quiz exists
+        const quiz = quizzes[hostId];
+        if (!quiz) {
+            return res.status(404).json({ message: "Quiz not found" });
+        }
+
+        // ✅ Notify all displays that the answer can now be lockn
+        const payload = {
+            type: "PAUSE_AUDIO"
+        };
+
+        // Send to displays
+        quiz.connections.displays.forEach((res) => {
+            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        });
+
+
+        res.status(200).json({ message: "Audio paused" });
     } catch (err) {
         console.error("Error in showAnswer:", err);
         res.status(500).json({ message: "Server error" });
@@ -294,7 +316,7 @@ const buildLeaderboard = (quiz) => {
     const array = Object.values(leaderboardMap).sort(
         (a, b) => b.totalPoints - a.totalPoints
     );
-    return [...array,...array,...array,...array,...array,...array,...array,...array,...array, ...array,...array,...array,...array,...array,...array,...array,...array,...array]
+    return [...array]
 };
 
 const setActiveQuestion = async (req, res) => {
@@ -330,6 +352,7 @@ const setActiveQuestion = async (req, res) => {
                 question: question.question.en || question.question,
                 options: question.options || [],
                 correctAnswer: question.correctAnswer || [],
+                defaultPoints: question.defaultPoints,
                 description: question.description || "",
                 currentAnswers: quiz.data.answers[question._id],
                 currentlyLocked: question.currentlyLocked || false,
@@ -353,8 +376,8 @@ const setActiveQuestion = async (req, res) => {
                 description: question.description || "",
                 currentlyLocked: question.currentlyLocked || false,
                 media: {
-                    showFile: question.media.showFile,
-                    showAudio: question.media.showAudio
+                    showFile: question.media?.showFile,
+                    showAudio: question.media?.showAudio
                 }
             }
         }
@@ -381,7 +404,11 @@ const submitAnswer = async (req, res) => {
         }
 
         const currentAnswers = quiz.data.answers[questionId]
-        if (currentAnswers.some(ca => ca.teamId === req.id)) return res.status(409).json({ 'message': "You already submitted an answer" })
+        if (currentAnswers.some(ca => ca.teamId === req.id)) {
+            if (quiz.data.currentQuestion.type === 'bidding') {
+                if (currentAnswers.some(a => a.answer === answer)) return
+            } else return res.status(409).json({ 'message': "You already submitted an answer" })
+        }
 
         const answerData = {
             teamId: req.id,
@@ -410,9 +437,53 @@ const submitAnswer = async (req, res) => {
             answers: quiz.data.answers[questionId],
         };
 
-        [...quiz.connections.displays, ...quiz.connections.staff].forEach((res) => {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
-        });
+        if (quiz.data.currentQuestion.type === 'bidding') {
+            const answers = quiz.data.answers[questionId];
+
+            const numericAnswers = answers.map(a => ({
+                ...a,
+                numericBid: Number(a.answer) || 0
+            }));
+
+            // Determine rule: highest or lowest wins
+            const rule = quiz.data.currentQuestion.correctAnswer?.[0];
+            const highestWins = rule === 'highest';
+
+            // Compute highest bid for display
+            const highestBid = Math.max(...numericAnswers.map(a => a.numericBid));
+
+            const highestBidPayload = {
+                type: "ANSWER_UPDATE",
+                highestBid,
+            };
+
+            // Send ONLY highest bid to displays + players
+            [...quiz.connections.displays, ...quiz.connections.player].forEach((res) => {
+                res.write(`data: ${JSON.stringify(highestBidPayload)}\n\n`);
+            });
+
+            // Sort for staff
+            const sortedAnswers = numericAnswers.sort((a, b) => {
+                return highestWins
+                    ? b.numericBid - a.numericBid   // highest first
+                    : a.numericBid - b.numericBid;  // lowest first
+            });
+
+            const staffPayload = {
+                type: "ANSWER_UPDATE",
+                answers: sortedAnswers,
+                rule: highestWins ? "highest" : "lowest"
+            };
+
+            // Send sorted answers to staff
+            quiz.connections.staff.forEach((res) => {
+                res.write(`data: ${JSON.stringify(staffPayload)}\n\n`);
+            });
+        } else {
+            [...quiz.connections.displays, ...quiz.connections.staff].forEach((res) => {
+                res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            });
+        }
 
         return res.status(200).json({ message: "Answer submitted" });
     } catch (error) {
@@ -446,14 +517,58 @@ const judgeAnswer = async (req, res) => {
         answer.judged = true;
         answer.pointsGranted = Number(pointsGranted) || 0
 
-        const payload = {
-            type: "ANSWER_UPDATE",
-            answers: quiz.data.answers[questionId],
-        };
+        if (quiz.data.currentQuestion.type === 'bidding') {
+            const answers = quiz.data.answers[questionId];
 
-        [...quiz.connections.displays, ...quiz.connections.staff].forEach((conn) => {
-            conn.write(`data: ${JSON.stringify(payload)}\n\n`);
-        });
+            const numericAnswers = answers.map(a => ({
+                ...a,
+                numericBid: Number(a.answer) || 0
+            }));
+            // Determine rule: highest or lowest wins
+            const rule = quiz.data.currentQuestion.correctAnswer?.[0];
+            const highestWins = rule === 'highest';
+
+            // Compute highest bid for display
+            const highestBid = Math.max(...numericAnswers.map(a => a.numericBid));
+
+            const highestBidPayload = {
+                type: "ANSWER_UPDATE",
+                highestBid,
+            };
+
+            // Send ONLY highest bid to displays + players
+            [...quiz.connections.displays, ...quiz.connections.player].forEach((res) => {
+                res.write(`data: ${JSON.stringify(highestBidPayload)}\n\n`);
+            });
+
+            // Sort for staff
+            const sortedAnswers = numericAnswers.sort((a, b) => {
+                return highestWins
+                    ? b.numericBid - a.numericBid   // highest first
+                    : a.numericBid - b.numericBid;  // lowest first
+            });
+
+            const staffPayload = {
+                type: "ANSWER_UPDATE",
+                answers: sortedAnswers,
+                rule: highestWins ? "highest" : "lowest"
+            };
+
+            // Send sorted answers to staff
+            quiz.connections.staff.forEach((res) => {
+                res.write(`data: ${JSON.stringify(staffPayload)}\n\n`);
+            });
+        } else {
+            const payload = {
+                type: "ANSWER_UPDATE",
+                answers: quiz.data.answers[questionId],
+            };
+
+            [...quiz.connections.displays, ...quiz.connections.staff].forEach((conn) => {
+                conn.write(`data: ${JSON.stringify(payload)}\n\n`);
+            });
+        }
+
 
         const leaderboard = buildLeaderboard(quiz);
 
@@ -509,6 +624,7 @@ module.exports = {
     lockQuestion,
     submitAnswer,
     judgeAnswer,
-    showLeaderboard
+    showLeaderboard,
+    pauseAudio
 }
 
