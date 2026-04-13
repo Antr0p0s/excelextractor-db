@@ -124,8 +124,6 @@ const createNewQuestion = async (req, res) => {
             }
         }
 
-
-
         if (!question.en || !question.nl || !category || !type || !req.user || !req.id) {
             return res.status(400).json({ 'message': 'Missing required fields' });
         }

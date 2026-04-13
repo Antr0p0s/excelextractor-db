@@ -30,7 +30,8 @@ app.use(credentials);
 app.use(cors(corsOptions));
 
 // built-in middleware to handle urlencoded form data
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // built-in middleware for json 
 app.use(express.json());
@@ -50,6 +51,9 @@ app.use('/public/auth', require('./routes/public/auth'));
 app.use('/public/register', require('./routes/public/register'));
 app.use('/public/refresh', require('./routes/refresh'));
 app.use('/public/logout', require('./routes/logout'));
+
+// stage route
+app.use('/skipauth/stage', require('./routes/private/stagestream'))
 
 // private routes --------------------------------------------
 app.use(verifyJWT);

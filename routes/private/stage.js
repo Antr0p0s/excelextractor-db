@@ -13,7 +13,7 @@ router.route('/file')
 router.route('/nextchunk')
     .post(verifyRoles(ROLES_LIST.Admin), stageController.skipChunk)
 
-router.route('/latestframes')
-    .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.getLatestFrames)
+router.route('/stream')
+    .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.streamMeasurement)
 
 module.exports = router;

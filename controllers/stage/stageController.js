@@ -82,37 +82,8 @@ const getFile = async (req, res) => {
     }
 }
 
-const stage_ip = 'https://stage.randomwebserver.eu'
-// const stage_ip = 'http://127.0.0.1:8000'
-const getLatestFrames = async (req, res) => {
-    const url = `${stage_ip}/latest-frames`;
-    const token = process.env.STAGE_AUTH_KEY
-
-    try {
-        const response = await fetch(url, {
-            method: 'GET', // or 'GET'
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            // If it's a POST, add your body here:
-            // body: JSON.stringify({ some: "data" })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        // Return the frames back to your frontend
-        res.status(200).json(data);
-
-    } catch (error) {
-        console.error('Error fetching latest frames:', error);
-        //res.status(500).json({ error: 'Failed to fetch frames' });
-    }
-};
+// const stage_ip = 'https://stage.randomwebserver.eu'
+const stage_ip = 'http://127.0.0.1:8000'
 
 const skipChunk = async (req, res) => {
     const url = `${stage_ip}/skip_chunk`;
@@ -150,10 +121,105 @@ const skipChunk = async (req, res) => {
     }
 };
 
+let frameBuffer = new Map();   // index -> frame
+let nextIndex = 0;
+
+const MAX_BUFFER_SIZE = 200;
+const MAX_WAIT_MS = 1000; // wait 2s before skipping
+
+let lastEmitTime = Date.now();
+let lastFrameReceivedAt = Date.now();
+
+const STREAM_TIMEOUT_MS = 60 * 1000; // 1 minute
+
+const streamMeasurement = async (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+    });
+
+    const interval = setInterval(() => {
+        const now = Date.now();
+
+        // 🚨 RESET if no frames received for 1 minute
+        if (now - lastFrameReceivedAt > STREAM_TIMEOUT_MS) {
+            console.log('[STREAM] No frames for 60s → resetting state');
+
+            frameBuffer.clear();
+            nextIndex = 0;
+            lastEmitTime = now;
+
+            // Optionally notify frontend
+            res.write(`data: ${JSON.stringify({
+                status: "reset",
+                message: "Stream inactive for 60s, waiting for new frames"
+            })}\n\n`);
+
+            return;
+        }
+
+        // ✅ If next frame exists → send it
+        if (frameBuffer.has(nextIndex)) {
+            const frame = frameBuffer.get(nextIndex);
+            res.write(`data: ${JSON.stringify(frame)}\n\n`);
+
+            frameBuffer.delete(nextIndex);
+            nextIndex++;
+            lastEmitTime = now;
+            return;
+        }
+
+        // ⏱️ If waiting too long → skip frame
+        if (now - lastEmitTime > MAX_WAIT_MS) {
+            nextIndex++;
+            lastEmitTime = now;
+        }
+
+    }, 100); // ~10 FPS output
+
+    req.on('close', () => {
+        clearInterval(interval);
+    });
+};
+
+const postFrame = async (req, res) => {
+    try {
+        const data = req.body;
+        const idx = data?.metadata?.index;
+
+        if (idx === undefined) {
+            return res.status(400).end();
+        }
+
+        const now = Date.now();
+
+        // ✅ Track last received frame time
+        lastFrameReceivedAt = now;
+
+        // Store frame in buffer
+        frameBuffer.set(idx, {
+            ...data,
+            receivedAt: now
+        });
+
+        // Prevent memory explosion
+        if (frameBuffer.size > MAX_BUFFER_SIZE) {
+            const oldestKey = Math.min(...frameBuffer.keys());
+            frameBuffer.delete(oldestKey);
+        }
+
+        res.status(200).end();
+    } catch (err) {
+        console.error("postFrame error:", err);
+        res.status(500).end();
+    }
+};
 
 module.exports = {
     getFileNames,
     getFile,
-    getLatestFrames,
-    skipChunk
+    skipChunk,
+    streamMeasurement,
+    postFrame
 };

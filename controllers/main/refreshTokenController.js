@@ -29,7 +29,6 @@ const handleRefreshToken = async (req, res) => {
                     { _id: foundUser._id },
                     { $set: { refreshToken: newRefreshTokenArray } }
                 );
-                console.log('this one')
                 return res.sendStatus(403);
             }
 
@@ -43,7 +42,7 @@ const handleRefreshToken = async (req, res) => {
             const accessToken = jwt.sign(
                 { "UserInfo": { "username": decoded.username, "displayName": displayName, "roles": roles, "id": foundUser._id } },
                 process.env.ACCESS_TOKEN_SECRET,
-                { expiresIn: '15m' }
+                { expiresIn: '60m' }
             );
 
             const newRefreshToken = jwt.sign(
