@@ -125,7 +125,7 @@ let frameBuffer = new Map();   // index -> frame
 let nextIndex = 0;
 
 const MAX_BUFFER_SIZE = 200;
-const MAX_WAIT_MS = 1000; // wait 2s before skipping
+const MAX_WAIT_MS = 5000; // wait 2s before skipping
 
 let lastEmitTime = Date.now();
 let lastFrameReceivedAt = Date.now();
@@ -176,7 +176,7 @@ const streamMeasurement = async (req, res) => {
             lastEmitTime = now;
         }
 
-    }, 100); // ~10 FPS output
+    }, 1000/7); // ~10 FPS output
 
     req.on('close', () => {
         clearInterval(interval);
