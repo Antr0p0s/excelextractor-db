@@ -82,7 +82,78 @@ const getFile = async (req, res) => {
     }
 }
 
+const stage_ip = 'https://stage.randomwebserver.eu'
+// const stage_ip = 'http://127.0.0.1:8000'
+const getLatestFrames = async (req, res) => {
+    const url = `${stage_ip}/latest-frames`;
+    const token = process.env.STAGE_AUTH_KEY
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET', // or 'GET'
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            // If it's a POST, add your body here:
+            // body: JSON.stringify({ some: "data" })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server responded with ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Return the frames back to your frontend
+        res.status(200).json(data);
+
+    } catch (error) {
+        console.error('Error fetching latest frames:', error);
+        //res.status(500).json({ error: 'Failed to fetch frames' });
+    }
+};
+
+const skipChunk = async (req, res) => {
+    const url = `${stage_ip}/skip_chunk`;
+    const token = process.env.STAGE_AUTH_KEY;
+
+    // Pull chunk_idx from the request body (sent from your React frontend)
+    const { chunk_idx } = req.body;
+
+    try {
+        // FastAPI Form(...) expects application/x-www-form-urlencoded
+        const formData = new URLSearchParams();
+        formData.append('chunk_index', chunk_idx); 
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                // 'Content-Type' is set automatically when using URLSearchParams
+            }, 
+            body: formData 
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Backend Error: ${errorText}`);
+            throw new Error(`Server responded with ${response.status}`);
+        }
+
+        const data = await response.json();
+        res.status(200).json(data);
+
+    } catch (error) {
+        console.error('Error skipping chunk:', error);
+        res.status(500).json({ error: 'Failed to skip chunk' });
+    }
+};
+
+
 module.exports = {
     getFileNames,
-    getFile
+    getFile,
+    getLatestFrames,
+    skipChunk
 };

@@ -10,4 +10,10 @@ router.route('/filenames')
 router.route('/file')
     .post(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.getFile)
 
+router.route('/nextchunk')
+    .post(verifyRoles(ROLES_LIST.Admin), stageController.skipChunk)
+
+router.route('/latestframes')
+    .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.getLatestFrames)
+
 module.exports = router;
