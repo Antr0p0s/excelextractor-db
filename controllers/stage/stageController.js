@@ -131,7 +131,7 @@ const skipChunk = async (req, res) => {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 // 'Content-Type' is set automatically when using URLSearchParams
-            },
+            }, 
             body: formData 
         });
 
