@@ -95,15 +95,15 @@ const skipChunk = async (req, res) => {
     try {
         // FastAPI Form(...) expects application/x-www-form-urlencoded
         const formData = new URLSearchParams();
-        formData.append('chunk_index', chunk_idx); 
+        formData.append('chunk_index', chunk_idx);
 
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 // 'Content-Type' is set automatically when using URLSearchParams
-            }, 
-            body: formData 
+            },
+            body: formData
         });
 
         if (!response.ok) {
@@ -144,11 +144,9 @@ const streamMeasurement = async (req, res) => {
 
         // 🚨 RESET if no frames received for 1 minute
         if (now - lastFrameReceivedAt > STREAM_TIMEOUT_MS) {
-            console.log('[STREAM] No frames for 60s → resetting state');
-
             frameBuffer.clear();
             nextIndex = 0;
-            lastEmitTime = now;
+            lastFrameReceivedAt = now;
 
             // Optionally notify frontend
             res.write(`data: ${JSON.stringify({
@@ -176,7 +174,7 @@ const streamMeasurement = async (req, res) => {
             lastEmitTime = now;
         }
 
-    }, 1000/7); // ~10 FPS output
+    }, 1000 / 7); // ~10 FPS output
 
     req.on('close', () => {
         clearInterval(interval);
@@ -216,10 +214,21 @@ const postFrame = async (req, res) => {
     }
 };
 
+const resetStream = async (req, res) => {
+    frameBuffer.clear();
+    nextIndex = 0;
+    lastFrameReceivedAt = Date.now();
+
+    console.log("[STREAM RESET] Python triggered reset");
+
+    res.json({ status: "reset ok" });
+}
+
 module.exports = {
     getFileNames,
     getFile,
     skipChunk,
     streamMeasurement,
-    postFrame
+    postFrame,
+    resetStream
 };

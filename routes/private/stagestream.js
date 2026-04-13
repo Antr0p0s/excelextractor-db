@@ -20,6 +20,7 @@ const verifyStageAuth = (req, res, next) => {
 };
 
 router.route('/')
-    .post(verifyStageAuth, stageController.postFrame);
+    .post(verifyStageAuth, stageController.postFrame)
+    .delete(verifyStageAuth, stageController.resetStream)
 
 module.exports = router;
