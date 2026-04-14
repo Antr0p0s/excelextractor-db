@@ -82,8 +82,7 @@ const getFile = async (req, res) => {
     }
 }
 
-// const stage_ip = 'https://stage.randomwebserver.eu'
-const stage_ip = 'http://127.0.0.1:8000'
+const stage_ip = process.env.STAGE_ADDRESS
 
 const skipChunk = async (req, res) => {
     const url = `${stage_ip}/skip_chunk`;
@@ -174,7 +173,7 @@ const streamMeasurement = async (req, res) => {
             lastEmitTime = now;
         }
 
-    }, 1000 / 7); // ~10 FPS output
+    }, 1000 / 7); 
 
     req.on('close', () => {
         clearInterval(interval);
