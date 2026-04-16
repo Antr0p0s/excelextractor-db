@@ -34,7 +34,7 @@ const getFileNames = async (req, res) => {
             .map((obj) => ({
                 key: obj.Key,
                 size_mb: obj.Size
-                    ? Math.round(obj.Size / (1024 * 1024) * 100) / 100
+                    ? Math.round(obj.Size / (1024 * 1024) * 100000) / 100000
                     : 0,
                 last_modified: obj.LastModified
                     ? obj.LastModified.toISOString()
@@ -68,7 +68,6 @@ const getFile = async (req, res) => {
             Bucket: process.env.S3_BUCKET_NAME_STAGE,
             Key: path, // Use the key, not the full URL
         });
-        console.log(path)
 
         // Generate a URL that expires in 60 minutes (3600 seconds)   (jk 15 min)     
         const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 * 15 });
