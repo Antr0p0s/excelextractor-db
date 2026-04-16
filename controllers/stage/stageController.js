@@ -68,7 +68,6 @@ const getFile = async (req, res) => {
     if (path.endsWith('.npy')) {
         const url = `${stage_ip}/get-npy-json?file_key=${path}`
         try {
-            console.log(`Requesting from ${url}`)
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
