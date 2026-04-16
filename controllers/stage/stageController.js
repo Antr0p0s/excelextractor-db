@@ -3,6 +3,9 @@ const { S3Client } = require('@aws-sdk/client-s3');
 const { GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
+const stage_ip =  process.env.STAGE_ADDRESS
+const token = process.env.STAGE_AUTH_KEY;
+
 const s3 = new S3Client({
     region: process.env.S3_REGION,
     endpoint: process.env.S3_ENDPOINT,
@@ -62,32 +65,48 @@ const getFileNames = async (req, res) => {
 const getFile = async (req, res) => {
     const { path } = req.body;
 
-    try {
-        // Create the command to get the specific object using its Key
-        const command = new GetObjectCommand({
-            Bucket: process.env.S3_BUCKET_NAME_STAGE,
-            Key: path, // Use the key, not the full URL
-        });
-        console.log(path)
+    if (path.endsWith('.npy')) {
+        const url = `${stage_ip}/get-npy-json?file_key=${path}`
+        try {
+            console.log(`Requesting from ${url}`)
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    // 'Content-Type' is set automatically when using URLSearchParams
+                },
+            })
 
-        // Generate a URL that expires in 60 minutes (3600 seconds)   (jk 15 min)     
-        const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 * 15 });
+            const data = await response.json()
 
-        // Redirect the browser to the temporary, authorized URL
-        res.json(presignedUrl);
+            return res.status(200).json({ data });
+        } catch (err) {
+            console.error("Python fetch error:", err);
+            res.status(500).json({ "message": "Could not get python data" });
+        }
+    } else { // png, mp4
+        try {
+            // Create the command to get the specific object using its Key
+            const command = new GetObjectCommand({
+                Bucket: process.env.S3_BUCKET_NAME_STAGE,
+                Key: path, // Use the key, not the full URL
+            });
 
-    } catch (err) {
-        console.error("Presigned URL Error:", err);
-        res.status(500).json({ "message": "Could not authorize file access" });
+            // Generate a URL that expires in 60 minutes (3600 seconds)   (jk 15 min)     
+            const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 * 15 });
+
+            // Redirect the browser to the temporary, authorized URL
+            res.json(presignedUrl);
+
+        } catch (err) {
+            console.error("Presigned URL Error:", err);
+            res.status(500).json({ "message": "Could not authorize file access" });
+        }
     }
 }
 
-// const stage_ip = 'https://stage.randomwebserver.eu'
-const stage_ip = 'http://127.0.0.1:8000'
-
 const skipChunk = async (req, res) => {
     const url = `${stage_ip}/skip_chunk`;
-    const token = process.env.STAGE_AUTH_KEY;
 
     // Pull chunk_idx from the request body (sent from your React frontend)
     const { chunk_idx } = req.body;
@@ -223,6 +242,8 @@ const resetStream = async (req, res) => {
 
     res.json({ status: "reset ok" });
 }
+
+
 
 module.exports = {
     getFileNames,
