@@ -78,6 +78,11 @@ router.route('/question')
         questionUploadFields,
         quizQuestionController.createNewQuestion
     )
+    .put(
+        verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin),
+        questionUploadFields,
+        quizQuestionController.editQuestion
+    )
 
 router.route('/question/:id')
     .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), quizQuestionController.getSingleQuestion)

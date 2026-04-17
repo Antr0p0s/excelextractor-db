@@ -146,7 +146,7 @@ const createNewQuestion = async (req, res) => {
         });
 
         // 3. Build the document
-        let questionObject = {
+        const questionObject = {
             question,
             category,
             description,
@@ -181,73 +181,121 @@ const createNewQuestion = async (req, res) => {
 };
 
 const editQuestion = async (req, res) => {
-    // 1. Destructure from req.body
-    let { _id, question, category, type, options, defaultPoints, correctAnswer } = req.body;
+    const {
+        _id,
+        category,
+        type,
+        defaultPoints,
+        correctAnswer,
+        description
+    } = req.body;
 
-    if (!_id) return res.status(400).json({ "message": 'Question ID required' });
+    if (!_id) {
+        return res.status(400).json({ message: "Question ID required" });
+    }
 
     try {
-        // 2. PARSE DATA: Multer sends everything as strings
-        // parse options if it's a string (it usually is with Multer)
-        let parsedOptions = options;
-        if (typeof options === 'string') {
+        const foundQuestion = await Question.findById(_id).exec();
+
+        if (!foundQuestion) {
+            return res.status(404).json({ message: `Question ID ${_id} not found` });
+        }
+
+        const isAdmin = req.roles.includes(ROLES_LIST.Admin);
+        const isOwner = foundQuestion.createdById === req.id;
+
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ message: "You're not allowed to edit this question" });
+        }
+
+        // ----------------------------
+        // PARSE MULTI-LANGUAGE QUESTION
+        // ----------------------------
+        let question = foundQuestion.question;
+
+        if (req.body.question) {
             try {
-                parsedOptions = JSON.parse(options);
+                question = JSON.parse(req.body.question);
+            } catch (e) {
+                console.error("Question parsing failed", e);
+            }
+        }
+
+        // ----------------------------
+        // PARSE OPTIONS
+        // ----------------------------
+        let parsedOptions = foundQuestion.options;
+
+        if (req.body.options) {
+            try {
+                parsedOptions = JSON.parse(req.body.options);
             } catch (e) {
                 console.error("Options parsing failed", e);
             }
         }
 
-        const foundQuestion = await Question.findById(_id).exec();
-        if (!foundQuestion) {
-            return res.status(404).json({ 'message': `Question ID ${_id} not found` });
-        }
-
-        if (foundQuestion.createdById !== req.id && !isAdmin) {
-            return res.status(403).json({ message: "You're not allowed to edit this question" })
-        }
-
-
-        // 3. Update fields
+        // ----------------------------
+        // UPDATE BASIC FIELDS
+        // ----------------------------
         foundQuestion.question = question;
         foundQuestion.category = category;
         foundQuestion.type = type;
+        foundQuestion.description = description;
 
-        const isAdmin = req.roles.includes(ROLES_LIST.Admin)
-
-
-        if (type === 'open') {
-            foundQuestion.defaultPoints = Number(defaultPoints); // Force to Number
-            foundQuestion.correctAnswer = correctAnswer;
+        // ----------------------------
+        // TYPE LOGIC (same as createNewQuestion)
+        // ----------------------------
+        if (type === "open" || type === "bidding") {
+            foundQuestion.defaultPoints = Number(defaultPoints) || 0;
+            foundQuestion.correctAnswer = correctAnswer ? [correctAnswer] : [];
             foundQuestion.options = undefined;
-        } else if (type === 'multiple') {
-            // Use the parsed array and ensure internal points are Numbers
+        }
+
+        if (type === "multiple") {
+            if (!parsedOptions || parsedOptions.length === 0) {
+                return res.status(400).json({ message: "Multiple choice requires options" });
+            }
+
             foundQuestion.options = parsedOptions.map(opt => ({
                 text: opt.text,
                 points: Number(opt.points)
             }));
-            foundQuestion.correctAnswer = undefined;
+
+            foundQuestion.correctAnswer = parsedOptions.filter(opt => opt.points >= 1);;
         }
 
-        // 4. Handle File 
-        const uploadedFile = req.file || (req.files && req.files[0]); // Check both for safety
+        // ----------------------------
+        // HANDLE MULTIPLE FILE UPLOADS (MATCH CREATE)
+        // ----------------------------
+        const media = foundQuestion.media || {};
 
-        if (uploadedFile) {
-            foundQuestion.media = {
-                fileUrl: uploadedFile.location,
-                fileKey: uploadedFile.key,
-                fileName: uploadedFile.originalname
-            };
-        }
+        const fileFields = ["showFile", "showAudio", "answerFile", "answerAudio"];
 
+        fileFields.forEach(field => {
+            if (req.files && req.files[field] && req.files[field][0]) {
+                const file = req.files[field][0];
+
+                media[field] = {
+                    url: file.location,
+                    key: file.key,
+                    mimetype: file.mimetype
+                };
+            }
+        });
+
+        foundQuestion.media = media;
+
+        // ----------------------------
+        // SAVE
+        // ----------------------------
         const result = await foundQuestion.save();
-        res.json(result);
+        return res.json(result);
 
     } catch (err) {
         console.error("Edit Error:", err);
-        res.status(500).json({ "message": err.message });
+        return res.status(500).json({ message: err.message });
     }
-}
+};
 
 const getSingleQuestion = async (req, res) => {
     try {
