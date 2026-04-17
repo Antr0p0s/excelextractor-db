@@ -342,6 +342,8 @@ const setActiveQuestion = async (req, res) => {
         quiz.data.currentQuestion = question;
         quiz.data.answers[question._id] = []
 
+        const lang = 'en'
+
         // Prepare payload for SSE
         const payload = {
             type: "QUESTION_UPDATE",
@@ -350,48 +352,51 @@ const setActiveQuestion = async (req, res) => {
                 category: question.category,
                 type: question.type,
                 question: question.question.en || question.question,
-                options: question.options || [],
-                correctAnswer: question.correctAnswer || [],
-                defaultPoints: question.defaultPoints,
-                description: question.description || "",
-                currentAnswers: quiz.data.answers[question._id],
-                currentlyLocked: question.currentlyLocked || false,
-                media: question.media || {}
-            }
-        };
+                options: question.options?.map(opt => ({
+                    text: opt.text[lang],
+                    points: opt.points,
+                })) || [],
+            correctAnswer: question.correctAnswer || [],
+            defaultPoints: question.defaultPoints,
+            description: question.description || "",
+            currentAnswers: quiz.data.answers[question._id],
+            currentlyLocked: question.currentlyLocked || false,
+            media: question.media || {}
+        }
+    };
 
-        // Broadcast to displays and staff
-        [...quiz.connections.displays, ...quiz.connections.staff].forEach((res) => {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
-        });
+    // Broadcast to displays and staff
+    [...quiz.connections.displays, ...quiz.connections.staff].forEach((res) => {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    });
 
-        const playerPayload = {
-            type: "QUESTION_UPDATE",
-            question: {
-                _id: question._id,
-                category: question.category,
-                type: question.type,
-                question: question.question.en || question.question,
-                options: question.options || [],
-                description: question.description || "",
-                currentlyLocked: question.currentlyLocked || false,
-                media: {
-                    showFile: question.media?.showFile,
-                    showAudio: question.media?.showAudio
-                }
+    const playerPayload = {
+        type: "QUESTION_UPDATE",
+        question: {
+            _id: question._id,
+            category: question.category,
+            type: question.type,
+            question: question.question.en || question.question,
+            options: question.options || [],
+            description: question.description || "",
+            currentlyLocked: question.currentlyLocked || false,
+            media: {
+                showFile: question.media?.showFile,
+                showAudio: question.media?.showAudio
             }
         }
-
-        quiz.connections.player.forEach((res) => {
-            res.write(`data: ${JSON.stringify(playerPayload)}\n\n`);
-        });
-
-        return res.status(200).json({ message: "Question activated", questionId });
-
-    } catch (err) {
-        console.error("setActiveQuestion error:", err);
-        return res.status(500).json({ message: "Internal server error" });
     }
+
+    quiz.connections.player.forEach((res) => {
+        res.write(`data: ${JSON.stringify(playerPayload)}\n\n`);
+    });
+
+    return res.status(200).json({ message: "Question activated", questionId });
+
+} catch (err) {
+    console.error("setActiveQuestion error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+}
 };
 
 const submitAnswer = async (req, res) => {
