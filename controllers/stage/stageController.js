@@ -14,6 +14,8 @@ const s3 = new S3Client({
     forcePathStyle: true,
 });
 
+const clients = new Set();
+
 const getFileNames = async (req, res) => {
     try {
         // 1. List objects from S3/MinIO
@@ -128,7 +130,7 @@ const MAX_WAIT_MS = 5000; // wait 2s before skipping
 let lastEmitTime = Date.now();
 let lastFrameReceivedAt = Date.now();
 
-const STREAM_TIMEOUT_MS = 60 * 1000; // 1 minute
+const STREAM_TIMEOUT_MS = 30 * 60 * 1000; // 30 minute
 
 const streamMeasurement = async (req, res) => {
     res.writeHead(200, {
@@ -137,47 +139,46 @@ const streamMeasurement = async (req, res) => {
         'Connection': 'keep-alive'
     });
 
-    const interval = setInterval(() => {
-        const now = Date.now();
+    // ✅ add client
+    clients.add(res);
 
-        // 🚨 RESET if no frames received for 1 minute
-        if (now - lastFrameReceivedAt > STREAM_TIMEOUT_MS) {
-            frameBuffer.clear();
-            nextIndex = 0;
-            lastFrameReceivedAt = now;
-
-            // Optionally notify frontend
-            res.write(`data: ${JSON.stringify({
-                status: "reset",
-                message: "Stream inactive for 60s, waiting for new frames"
-            })}\n\n`);
-
-            return;
-        }
-
-        // ✅ If next frame exists → send it
-        if (frameBuffer.has(nextIndex)) {
-            const frame = frameBuffer.get(nextIndex);
-            res.write(`data: ${JSON.stringify(frame)}\n\n`);
-
-            frameBuffer.delete(nextIndex);
-            nextIndex++;
-            lastEmitTime = now;
-            return;
-        }
-
-        // ⏱️ If waiting too long → skip frame
-        if (now - lastEmitTime > MAX_WAIT_MS) {
-            nextIndex++;
-            lastEmitTime = now;
-        }
-
-    }, 1000 / 7); 
+    console.log(`[STREAM] Client connected (${clients.size} total)`);
 
     req.on('close', () => {
-        clearInterval(interval);
+        clients.delete(res);
+
+        console.log(`[STREAM] Client disconnected (${clients.size} left)`);
     });
 };
+
+setInterval(() => {
+    const now = Date.now();
+
+    if (frameBuffer.has(nextIndex)) {
+        const frame = frameBuffer.get(nextIndex);
+        broadcast(frame);
+        frameBuffer.delete(nextIndex);
+        nextIndex++;
+    }
+
+    if (now - lastEmitTime > MAX_WAIT_MS) {
+        nextIndex++;
+        lastEmitTime = now;
+    }
+}, 1000 / 7);
+
+function broadcast(data) {
+    const payload = `data: ${JSON.stringify(data)}\n\n`;
+
+    for (const client of clients) {
+        try {
+            client.write(payload);
+        } catch (err) {
+            console.error("[STREAM] Client write failed, removing");
+            clients.delete(client);
+        }
+    }
+}
 
 const postFrame = async (req, res) => {
     try {
@@ -213,14 +214,20 @@ const postFrame = async (req, res) => {
 };
 
 const resetStream = async (req, res) => {
+    console.log("[STREAM RESET] Triggered");
+
     frameBuffer.clear();
     nextIndex = 0;
     lastFrameReceivedAt = Date.now();
 
-    console.log("[STREAM RESET] Python triggered reset");
+    // 🔥 notify ALL clients
+    broadcast({
+        status: "reset",
+        message: "Stream manually reset"
+    });
 
     res.json({ status: "reset ok" });
-}
+};
 
 module.exports = {
     getFileNames,
