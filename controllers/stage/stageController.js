@@ -16,6 +16,9 @@ const s3 = new S3Client({
 
 const clients = new Set();
 
+let lastFrameReceivedAt
+const STREAM_TIMEOUT_MS = 15 * 60 * 1000; // 15 minute
+
 const getFileNames = async (req, res) => {
     try {
         // 1. List objects from S3/MinIO
@@ -121,17 +124,6 @@ const skipChunk = async (req, res) => {
     }
 };
 
-let frameBuffer = new Map();   // index -> frame
-let nextIndex = 0;
-
-const MAX_BUFFER_SIZE = 200;
-const MAX_WAIT_MS = 5000; // wait 2s before skipping
-
-let lastEmitTime = Date.now();
-let lastFrameReceivedAt = Date.now();
-
-const STREAM_TIMEOUT_MS = 30 * 60 * 1000; // 30 minute
-
 const streamMeasurement = async (req, res) => {
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -151,22 +143,6 @@ const streamMeasurement = async (req, res) => {
     });
 };
 
-setInterval(() => {
-    const now = Date.now();
-
-    if (frameBuffer.has(nextIndex)) {
-        const frame = frameBuffer.get(nextIndex);
-        broadcast(frame);
-        frameBuffer.delete(nextIndex);
-        nextIndex++;
-    }
-
-    if (now - lastEmitTime > MAX_WAIT_MS) {
-        nextIndex++;
-        lastEmitTime = now;
-    }
-}, 1000 / 7);
-
 function broadcast(data) {
     const payload = `data: ${JSON.stringify(data)}\n\n`;
 
@@ -175,6 +151,7 @@ function broadcast(data) {
             client.write(payload);
         } catch (err) {
             console.error("[STREAM] Client write failed, removing");
+            client.end(); 
             clients.delete(client);
         }
     }
@@ -183,41 +160,46 @@ function broadcast(data) {
 const postFrame = async (req, res) => {
     try {
         const data = req.body;
-        const idx = data?.metadata?.index;
 
-        if (idx === undefined) {
+        if (!data?.metadata) {
             return res.status(400).end();
         }
 
         const now = Date.now();
-
-        // ✅ Track last received frame time
         lastFrameReceivedAt = now;
 
-        // Store frame in buffer
-        frameBuffer.set(idx, {
+        // ✅ immediately broadcast (NO buffering, NO ordering)
+        broadcast({
             ...data,
             receivedAt: now
         });
 
-        // Prevent memory explosion
-        if (frameBuffer.size > MAX_BUFFER_SIZE) {
-            const oldestKey = Math.min(...frameBuffer.keys());
-            frameBuffer.delete(oldestKey);
-        }
-
         res.status(200).end();
+
     } catch (err) {
         console.error("postFrame error:", err);
         res.status(500).end();
     }
 };
 
+setInterval(() => {
+    const now = Date.now();
+
+    if (now - lastFrameReceivedAt > STREAM_TIMEOUT_MS) {
+        console.log("[STREAM] Timeout reset");
+
+        lastFrameReceivedAt = now;
+
+        broadcast({
+            status: "reset",
+            message: "Stream inactive, reset"
+        });
+    }
+}, 5000); 
+
 const resetStream = async (req, res) => {
     console.log("[STREAM RESET] Triggered");
 
-    frameBuffer.clear();
-    nextIndex = 0;
     lastFrameReceivedAt = Date.now();
 
     // 🔥 notify ALL clients
