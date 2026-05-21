@@ -47,23 +47,4 @@ const getRoles = (type) => {
     if (type === 'quiz') return { QuizUser: 2002 }
 }
 
-const createUser = async () => {
-    console.log('creating user')
-    const hashedPwd = await bcrypt.hash('Suomessa@17.06!', 10);
-
-    const roles = { User: 2001, Admin: 5150 }
-
-    //create and store the new user
-    const result = await User.create({
-        "username": 'jelmer',
-        "displayName": 'Jelmer',
-        "password": hashedPwd,
-        "createMoment": new Date().getTime(),
-        "roles": roles
-    });
-    console.log(result)
-}
-
-createUser()
-
 module.exports = { handleNewUser };
