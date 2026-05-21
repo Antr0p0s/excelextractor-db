@@ -24,7 +24,6 @@ const getPersonalSets = async (req, res) => {
     }
 
     try {
-        // Optimization: Let MongoDB do the filtering
         const personalSets = await Set.find({ ownerId: req.id });
         res.status(200).json(personalSets);
     } catch (err) {
@@ -33,8 +32,8 @@ const getPersonalSets = async (req, res) => {
 }
 
 const updateSet = async (req, res) => {
-    const { id } = req.params; // Get set ID from URL
-    const isAdmin = req.roles?.includes(5150); // Assuming 5150 is Admin from your store
+    const { id } = req.params; 
+    const isAdmin = req.roles?.includes(5150); 
 
     if (!id) return res.status(400).json({ message: "Set ID required" });
 

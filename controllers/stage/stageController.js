@@ -31,8 +31,8 @@ const STREAM_TIMEOUT_MS = 15 * 60 * 1000;
 const getFileNames = async (req, res) => {
     try {
         const command = new ListObjectsV2Command({
-            Bucket: process.env.SEAWEED_BUCKET_STAGE,
-            Prefix: "1stage/",
+            Bucket: process.env.SEAWEED_BUCKET,
+            Name: "1stage",
         });
 
         const response = await s3.send(command);
@@ -42,7 +42,7 @@ const getFileNames = async (req, res) => {
         }
 
         const files = response.Contents
-            .filter((obj) => obj.Key !== "1stage/")
+            .filter((obj) => obj.Name !== "1stage/")
             .map((obj) => ({
                 key: obj.Key,
 
@@ -85,7 +85,6 @@ const getFile = async (req, res) => {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
-                    // 'Content-Type' is set automatically when using URLSearchParams
                 },
             })
 
@@ -100,7 +99,7 @@ const getFile = async (req, res) => {
         try {
             // Create the command to get the specific object using its Key
             const command = new GetObjectCommand({
-                Bucket: process.env.S3_BUCKET_NAME_STAGE,
+                Bucket: process.env.SEAWEED_BUCKET,
                 Key: path, // Use the key, not the full URL
             });
 
@@ -129,11 +128,9 @@ const skipChunk = async (req, res) => {
 
         const response = await fetch(url, {
             method: "POST",
-
             headers: {
                 Authorization: `Bearer ${token}`,
             },
-
             body: formData,
         });
 
@@ -190,9 +187,6 @@ function broadcast(data) {
 
         } catch (err) {
             console.error("[STREAM] Client write failed, removing");
-
-    }, 1000 / 7); // ~10 FPS output
-
             clients.delete(client);
         }
     }
