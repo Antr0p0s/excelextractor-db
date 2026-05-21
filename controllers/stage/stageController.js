@@ -327,14 +327,14 @@ const compile = async (req, res) => {
     }
 };
 
-fetch(`${stage_ip}/compile`, {
-    method: "POST",
-    headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ folder: 'partUpload/raw - procent 263 - 1' })
-});
+// fetch(`${stage_ip}/compile`, {
+//     method: "POST",
+//     headers: {
+//         "Authorization": `Bearer ${token}`,
+//         "Content-Type": "application/json"
+//     },
+//     body: JSON.stringify({ folder: 'partUpload/raw - procent 263 - 1' })
+// });
 
 
 module.exports = {
