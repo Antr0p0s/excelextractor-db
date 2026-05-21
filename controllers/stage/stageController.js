@@ -3,12 +3,15 @@ const axios = require("axios");
 const {
     S3Client,
     GetObjectCommand,
-    ListObjectsV2Command
+    ListObjectsV2Command,
+    CreateMultipartUploadCommand,
+    UploadPartCommand,
+    CompleteMultipartUploadCommand
 } = require("@aws-sdk/client-s3");
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
-const stage_ip =  process.env.STAGE_ADDRESS
+const stage_ip = process.env.STAGE_ADDRESS
 const token = process.env.STAGE_AUTH_KEY;
 
 const s3 = new S3Client({
@@ -26,7 +29,7 @@ const clients = new Set();
 
 let lastFrameReceivedAt = Date.now();
 
-const STREAM_TIMEOUT_MS = 15 * 60 * 1000; 
+const STREAM_TIMEOUT_MS = 15 * 60 * 1000;
 
 const getFileNames = async (req, res) => {
     try {
@@ -257,6 +260,81 @@ const resetStream = async (req, res) => {
     });
 };
 
+const initiate = async (req, res) => {
+    const { fileName, folderName } = req.body;
+
+    if (!fileName || !fileName) return res.status(401).end()
+
+    const s3Key = `${folderName}/${fileName}`;
+
+    const command = new CreateMultipartUploadCommand({ Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key });
+    const response = await s3.send(command);
+    res.json({ uploadId: response.UploadId, s3Key });
+}
+
+const presign = async (req, res) => {
+    const { s3Key, uploadId, partNumber } = req.body;
+
+    if (!s3Key || !uploadId || !partNumber) return res.status(401).end()
+
+    const command = new UploadPartCommand({
+        Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key, UploadId: uploadId, PartNumber: partNumber
+    });
+
+    const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    res.json({ presignedUrl });
+}
+
+const complete = async (req, res) => {
+    const { s3Key, uploadId, parts } = req.body;
+
+    if (!s3Key || !uploadId || !parts) return res.status(401).end()
+
+    const command = new CompleteMultipartUploadCommand({
+        Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key, UploadId: uploadId,
+        MultipartUpload: { Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber) }
+    });
+    await s3.send(command);
+    res.json({ success: true });
+}
+
+const compile = async (req, res) => {
+    const url = `${stage_ip}/compile`;
+    const { folder } = req.body;
+
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ folder })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Backend Error: ${errorText}`);
+            throw new Error(`Server responded with ${response.status}`);
+        }
+
+        const data = await response.json();
+        return res.status(200).json(data);
+
+    } catch (error) {
+        console.error("Error compiling:", error);
+        return res.status(500).json({ error: "Failed to compile" });
+    }
+};
+
+fetch(`${stage_ip}/compile`, {
+    method: "POST",
+    headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ folder: 'partUpload/raw - procent 263 - 1' })
+});
 
 
 module.exports = {
@@ -266,4 +344,8 @@ module.exports = {
     streamMeasurement,
     postFrame,
     resetStream,
+    initiate,
+    presign,
+    complete,
+    compile
 };

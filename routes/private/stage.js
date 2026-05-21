@@ -13,6 +13,18 @@ router.route('/file')
 router.route('/nextchunk')
     .post(verifyRoles(ROLES_LIST.Admin), stageController.skipChunk)
 
+router.route('/upload/initiate')
+    .post(verifyRoles(ROLES_LIST.Admin), stageController.initiate)
+
+router.route('/upload/presign')
+    .post(verifyRoles(ROLES_LIST.Admin), stageController.presign)
+
+router.route('/upload/complete')
+    .post(verifyRoles(ROLES_LIST.Admin), stageController.complete)
+
+router.route('/upload/compile')
+    .post(verifyRoles(ROLES_LIST.Admin), stageController.compile)
+
 router.route('/stream')
     .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.streamMeasurement)
 
