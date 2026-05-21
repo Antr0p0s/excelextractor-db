@@ -1,34 +1,29 @@
 const axios = require("axios");
-
-const {
-    S3Client,
-    GetObjectCommand,
-    ListObjectsV2Command
-} = require("@aws-sdk/client-s3");
-
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { S3Client } = require('@aws-sdk/client-s3');
+const { GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const s3 = new S3Client({
-    region: process.env.SEAWEED_REGION || "us-east-1",
-    endpoint: process.env.SEAWEED_S3_ENDPOINT,
-
+    region: process.env.S3_REGION,
+    endpoint: process.env.S3_ENDPOINT,
     credentials: {
-        accessKeyId: process.env.SEAWEED_ACCESS_KEY,
-        secretAccessKey: process.env.SEAWEED_SECRET_KEY,
+        accessKeyId: process.env.S3_ACCESS_KEY,
+        secretAccessKey: process.env.S3_SECRET_KEY,
     },
+    // forcePathStyle is often required for non-AWS providers (like MinIO)
     forcePathStyle: true,
 });
 
 const clients = new Set();
 
-let lastFrameReceivedAt = Date.now();
-
-const STREAM_TIMEOUT_MS = 15 * 60 * 1000; 
+let lastFrameReceivedAt
+const STREAM_TIMEOUT_MS = 15 * 60 * 1000; // 15 minute
 
 const getFileNames = async (req, res) => {
     try {
+        // 1. List objects from S3/MinIO
         const command = new ListObjectsV2Command({
-            Bucket: process.env.SEAWEED_BUCKET_STAGE,
+            Bucket: process.env.S3_BUCKET_NAME_STAGE,
             Prefix: "1stage/",
         });
 
@@ -38,20 +33,20 @@ const getFileNames = async (req, res) => {
             return res.status(200).json({ files: [] });
         }
 
+        // 2. Extract metadata
         const files = response.Contents
-            .filter((obj) => obj.Key !== "1stage/")
+            .filter((obj) => obj.Key !== "1stage/") // skip folder marker
             .map((obj) => ({
                 key: obj.Key,
-
                 size_mb: obj.Size
-                    ? Math.round((obj.Size / (1024 * 1024)) * 100000) / 100000
+                    ? Math.round(obj.Size / (1024 * 1024) * 100000) / 100000
                     : 0,
-
                 last_modified: obj.LastModified
                     ? obj.LastModified.toISOString()
                     : null,
             }));
 
+        // 3. Sort by newest first
         files.sort(
             (a, b) =>
                 new Date(b.last_modified) - new Date(a.last_modified)
@@ -60,115 +55,91 @@ const getFileNames = async (req, res) => {
         return res.status(200).json({ files });
 
     } catch (err) {
-        console.error("SeaweedFS List Error:", err);
+        console.error("List files Error:", err);
 
         return res.status(500).json({
-            message: "SeaweedFS Error",
+            message: "S3 Error",
             error: err.message,
         });
     }
 };
 
-/**
- * Generate presigned download URL
- */
 const getFile = async (req, res) => {
     const { path } = req.body;
 
     try {
+        // Create the command to get the specific object using its Key
         const command = new GetObjectCommand({
-            Bucket: process.env.SEAWEED_BUCKET_STAGE,
-            Key: path,
+            Bucket: process.env.S3_BUCKET_NAME_STAGE,
+            Key: path, // Use the key, not the full URL
         });
 
-        // 15 hour expiry
-        const presignedUrl = await getSignedUrl(
-            s3,
-            command,
-            {
-                expiresIn: 3600 * 15,
-            }
-        );
+        // Generate a URL that expires in 60 minutes (3600 seconds)   (jk 15 min)     
+        const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 * 15 });
 
+        // Redirect the browser to the temporary, authorized URL
         res.json(presignedUrl);
 
     } catch (err) {
         console.error("Presigned URL Error:", err);
-
-        res.status(500).json({
-            message: "Could not authorize file access",
-        });
+        res.status(500).json({ "message": "Could not authorize file access" });
     }
-};
+}
 
-const stage_ip = process.env.STAGE_ADDRESS;
+const stage_ip = process.env.STAGE_ADDRESS
 
-/**
- * Skip chunk endpoint
- */
 const skipChunk = async (req, res) => {
     const url = `${stage_ip}/skip_chunk`;
-
     const token = process.env.STAGE_AUTH_KEY;
 
+    // Pull chunk_idx from the request body (sent from your React frontend)
     const { chunk_idx } = req.body;
 
     try {
+        // FastAPI Form(...) expects application/x-www-form-urlencoded
         const formData = new URLSearchParams();
-
-        formData.append("chunk_index", chunk_idx);
+        formData.append('chunk_index', chunk_idx);
 
         const response = await fetch(url, {
-            method: "POST",
-
+            method: 'POST',
             headers: {
-                Authorization: `Bearer ${token}`,
+                'Authorization': `Bearer ${token}`,
+                // 'Content-Type' is set automatically when using URLSearchParams
             },
-
-            body: formData,
+            body: formData
         });
 
         if (!response.ok) {
             const errorText = await response.text();
-
             console.error(`Backend Error: ${errorText}`);
-
             throw new Error(`Server responded with ${response.status}`);
         }
 
         const data = await response.json();
-
         res.status(200).json(data);
 
     } catch (error) {
-        console.error("Error skipping chunk:", error);
-
-        res.status(500).json({
-            error: "Failed to skip chunk",
-        });
+        console.error('Error skipping chunk:', error);
+        res.status(500).json({ error: 'Failed to skip chunk' });
     }
 };
 
-/**
- * SSE stream endpoint
- */
 const streamMeasurement = async (req, res) => {
     res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
     });
 
+    // ✅ add client
     clients.add(res);
 
     console.log(`[STREAM] Client connected (${clients.size} total)`);
 
-    req.on("close", () => {
+    req.on('close', () => {
         clients.delete(res);
 
-        console.log(
-            `[STREAM] Client disconnected (${clients.size} left)`
-        );
+        console.log(`[STREAM] Client disconnected (${clients.size} left)`);
     });
 };
 
@@ -178,20 +149,14 @@ function broadcast(data) {
     for (const client of clients) {
         try {
             client.write(payload);
-
         } catch (err) {
             console.error("[STREAM] Client write failed, removing");
-
-            client.end();
-
+            client.end(); 
             clients.delete(client);
         }
     }
 }
 
-/**
- * Receive frame
- */
 const postFrame = async (req, res) => {
     try {
         const data = req.body;
@@ -201,26 +166,22 @@ const postFrame = async (req, res) => {
         }
 
         const now = Date.now();
-
         lastFrameReceivedAt = now;
 
+        // ✅ immediately broadcast (NO buffering, NO ordering)
         broadcast({
             ...data,
-            receivedAt: now,
+            receivedAt: now
         });
 
         res.status(200).end();
 
     } catch (err) {
         console.error("postFrame error:", err);
-
         res.status(500).end();
     }
 };
 
-/**
- * Auto stream reset
- */
 setInterval(() => {
     const now = Date.now();
 
@@ -231,27 +192,23 @@ setInterval(() => {
 
         broadcast({
             status: "reset",
-            message: "Stream inactive, reset",
+            message: "Stream inactive, reset"
         });
     }
-}, 5000);
+}, 5000); 
 
-/**
- * Manual stream reset
- */
 const resetStream = async (req, res) => {
     console.log("[STREAM RESET] Triggered");
 
     lastFrameReceivedAt = Date.now();
 
+    // 🔥 notify ALL clients
     broadcast({
         status: "reset",
-        message: "Stream manually reset",
+        message: "Stream manually reset"
     });
 
-    res.json({
-        status: "reset ok",
-    });
+    res.json({ status: "reset ok" });
 };
 
 module.exports = {
@@ -260,5 +217,5 @@ module.exports = {
     skipChunk,
     streamMeasurement,
     postFrame,
-    resetStream,
+    resetStream
 };

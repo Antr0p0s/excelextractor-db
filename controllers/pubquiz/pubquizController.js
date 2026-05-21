@@ -4,13 +4,13 @@ const { DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const ROLES_LIST = require('../../config/roles_list')
 
 const s3 = new S3Client({
-    region: process.env.S3_REGION,
-    endpoint: process.env.S3_ENDPOINT,
+    region: process.env.SEAWEED_REGION || "us-east-1",
+    endpoint: process.env.SEAWEED_S3_ENDPOINT,
+
     credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY,
-        secretAccessKey: process.env.SC_SECRET_KEY,
+        accessKeyId: process.env.SEAWEED_ACCESS_KEY,
+        secretAccessKey: process.env.SEAWEED_SECRET_KEY,
     },
-    // forcePathStyle is often required for non-AWS providers (like MinIO)
     forcePathStyle: true,
 });
 
