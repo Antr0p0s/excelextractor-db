@@ -267,7 +267,7 @@ const initiate = async (req, res) => {
 
     const s3Key = `${folderName}/${fileName}`;
 
-    const command = new CreateMultipartUploadCommand({ Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key });
+    const command = new CreateMultipartUploadCommand({ Bucket: process.env.SEAWEED_UPLOAD_BUCKET_BUFFER, Key: s3Key });
     const response = await s3.send(command);
     res.json({ uploadId: response.UploadId, s3Key });
 }
@@ -278,7 +278,7 @@ const presign = async (req, res) => {
     if (!s3Key || !uploadId || !partNumber) return res.status(401).end()
 
     const command = new UploadPartCommand({
-        Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key, UploadId: uploadId, PartNumber: partNumber
+        Bucket: process.env.SEAWEED_UPLOAD_BUCKET_BUFFER, Key: s3Key, UploadId: uploadId, PartNumber: partNumber
     });
 
     const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
@@ -291,7 +291,7 @@ const complete = async (req, res) => {
     if (!s3Key || !uploadId || !parts) return res.status(401).end()
 
     const command = new CompleteMultipartUploadCommand({
-        Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key, UploadId: uploadId,
+        Bucket: process.env.SEAWEED_UPLOAD_BUCKET_BUFFER, Key: s3Key, UploadId: uploadId,
         MultipartUpload: { Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber) }
     });
     await s3.send(command);
@@ -327,14 +327,17 @@ const compile = async (req, res) => {
     }
 };
 
-// fetch(`${stage_ip}/compile`, {
+// console.log('posting to stage server')
+// fetch(`https://stage-api.randomwebserver.eu/compile`, {
 //     method: "POST",
 //     headers: {
 //         "Authorization": `Bearer ${token}`,
 //         "Content-Type": "application/json"
 //     },
 //     body: JSON.stringify({ folder: 'partUpload/raw - procent 263 - 1' })
-// });
+// }).then((res) => {
+//     console.log(res)
+// }) 
 
 
 module.exports = {
