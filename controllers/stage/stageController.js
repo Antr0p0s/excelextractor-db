@@ -293,7 +293,7 @@ const resetStream = async (req, res) => {
 const initiate = async (req, res) => {
     const { fileName, folderName } = req.body;
 
-    if (!fileName || !fileName) return res.status(401).end()
+    if (!fileName || !folderName) return res.status(401).end()
 
     const s3Key = `${folderName}/${fileName}`;
 
