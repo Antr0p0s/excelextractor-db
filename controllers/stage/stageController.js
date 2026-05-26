@@ -392,16 +392,16 @@ const getFileMetaData = async (req, res) => {
     }
 
     try {
-        // Find the record matching the exact file path string
-        const record = await Annotation.findOne({ filePath: filePath.trim() });
+        // Find all independent annotation documents matching this exact file path string
+        const records = await Annotation.find({ filePath: filePath.trim() });
 
-        // If no records have been saved for this file yet, return an empty array
-        if (!record) {
+        // Mongoose .find() always returns an array. If empty, return [] safely.
+        if (!records || records.length === 0) {
             return res.status(200).json([]);
         }
 
-        // Return the array of annotation points stored inside the document
-        return res.status(200).json(record.annotations);
+        // Return the array of annotation documents directly to the frontend
+        return res.status(200).json(records);
 
     } catch (error) {
         console.error(`Database error fetching annotations for ${filePath}:`, error);
@@ -413,13 +413,7 @@ const getFileMetaData = async (req, res) => {
 };
 
 const putMetaData = async (req, res) => {
-    const { filePath, annotation } = req.body;
-
-    if (!filePath) {
-        return res.status(400).json({
-            message: 'Missing required parameter: filePath'
-        });
-    }
+    const { annotation } = req.body;
 
     if (!annotation || typeof annotation !== 'object') {
         return res.status(400).json({
@@ -428,80 +422,50 @@ const putMetaData = async (req, res) => {
     }
 
     try {
-        const updatedRecord = await Annotation.findOneAndUpdate(
-            { filePath: filePath.trim() },
-
-            {
-                $push: {
-                    annotations: annotation
-                }
-            },
-
-            {
-                new: true,
-                upsert: true,
-                runValidators: true
-            }
-        );
+        // Purely create and save a brand-new independent document
+        const newRecord = await Annotation.create(annotation);
 
         return res.status(200).json({
-            message: 'Annotation added successfully',
-            filePath: updatedRecord.filePath,
-            count: updatedRecord.annotations.length,
-            annotation
+            message: 'Annotation created successfully',
+            annotation: newRecord
         });
 
     } catch (error) {
-        console.error(
-            `Database error writing annotation for ${filePath}:`,
-            error
-        );
-
+        console.error(`Database error creating new annotation document:`, error);
         return res.status(500).json({
-            message: 'Internal server error committing data updates',
+            message: 'Internal server error processing creation request',
             error: error.message
         });
     }
 };
 
 const deleteMetaData = async (req, res) => {
-    const { filePath, annotationId } = req.body;
+    const { annotationId } = req.body;
 
-    // 1. Validation: Ensure both parameters are present
-    if (!filePath || !annotationId) {
+    if (!annotationId) {
         return res.status(400).json({
-            message: 'Missing required parameters: filePath and annotationId are required.'
+            message: 'Missing required parameter: annotationId is required.'
         });
     }
 
     try {
-        // 2. Use $pull to atomically remove the object with the matching id from the array
-        const updatedRecord = await Annotation.findOneAndUpdate(
-            { filePath: filePath.trim() },
-            {
-                $pull: {
-                    annotations: { id: annotationId }
-                }
-            },
-            { new: true } // Returns the document after the deletion is applied
-        );
+        // Find the document with the matching custom ID and remove it completely
+        const deletedRecord = await Annotation.findOneAndDelete({ id: annotationId });
 
-        // 3. Handle the case where the file path itself wasn't found in the database
-        if (!updatedRecord) {
+        // If no document matched that specific annotation ID
+        if (!deletedRecord) {
             return res.status(404).json({
-                message: 'No metadata record found for the provided filePath.'
+                message: 'No annotation found matching the provided identifier.'
             });
         }
 
-        // 4. Success response returning the remaining annotation count
         return res.status(200).json({
-            message: 'Annotation removed successfully',
-            filePath: updatedRecord.filePath,
-            remainingCount: updatedRecord.annotations.length
+            message: 'Annotation found and removed successfully',
+            deletedAnnotation: deletedRecord
         });
 
     } catch (error) {
-        console.error(`Database error deleting annotation ${annotationId} from ${filePath}:`, error);
+        console.error(`Database error searching and deleting annotation ${annotationId}:`, error);
         return res.status(500).json({
             message: 'Internal server error processing deletion request',
             error: error.message
