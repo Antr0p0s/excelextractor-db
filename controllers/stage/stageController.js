@@ -473,22 +473,6 @@ const deleteMetaData = async (req, res) => {
     }
 };
 
-const purgeAnnotationCollection = async () => {
-    try {
-        // .collection.drop() talks directly to MongoDB, bypassing Mongoose middleware hooks
-        await Annotation.collection.drop();
-        console.log("🚀 Annotation collection and all its structural indexes dropped clean!");
-    } catch (error) {
-        // If the collection doesn't exist yet, Mongo throws code 26. We can safely ignore that.
-        if (error.code === 26) {
-            console.log("Collection doesn't exist yet, nothing to drop.");
-        } else {
-            console.error("Error dropping annotation collection:", error);
-        }
-    }
-};
-purgeAnnotationCollection()
-
 module.exports = {
     getFileNames,
     getFile,
