@@ -3,12 +3,15 @@ const axios = require("axios");
 const {
     S3Client,
     GetObjectCommand,
-    ListObjectsV2Command
+    ListObjectsV2Command,
+    CreateMultipartUploadCommand,
+    UploadPartCommand,
+    CompleteMultipartUploadCommand
 } = require("@aws-sdk/client-s3");
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
-const stage_ip =  process.env.STAGE_ADDRESS
+const stage_ip = process.env.STAGE_ADDRESS
 const token = process.env.STAGE_AUTH_KEY;
 
 const s3 = new S3Client({
@@ -26,13 +29,13 @@ const clients = new Set();
 
 let lastFrameReceivedAt = Date.now();
 
-const STREAM_TIMEOUT_MS = 15 * 60 * 1000; 
+const STREAM_TIMEOUT_MS = 15 * 60 * 1000;
 
 const getFileNames = async (req, res) => {
     try {
         const command = new ListObjectsV2Command({
-            Bucket: process.env.SEAWEED_BUCKET_STAGE,
-            Prefix: "1stage/",
+            Bucket: process.env.SEAWEED_BUCKET,
+            Name: "1stage",
         });
 
         const response = await s3.send(command);
@@ -42,7 +45,7 @@ const getFileNames = async (req, res) => {
         }
 
         const files = response.Contents
-            .filter((obj) => obj.Key !== "1stage/")
+            .filter((obj) => obj.Name !== "1stage/")
             .map((obj) => ({
                 key: obj.Key,
 
@@ -60,7 +63,37 @@ const getFileNames = async (req, res) => {
                 new Date(b.last_modified) - new Date(a.last_modified)
         );
 
-        return res.status(200).json({ files });
+
+        const buffercommand = new ListObjectsV2Command({
+            Bucket: process.env.SEAWEED_UPLOAD_BUCKET,
+            Name: "1stage",
+        });
+
+        const bufferresponse = await s3.send(command);
+
+        if (!bufferresponse.Contents) {
+            return res.status(200).json({ files: [] });
+        }
+
+        const bufferfiles = response.Contents
+            .map((obj) => ({
+                key: obj.Key,
+
+                size_mb: obj.Size
+                    ? Math.round(obj.Size / (1024 * 1024) * 100) / 100
+                    : 0,
+
+                last_modified: obj.LastModified
+                    ? obj.LastModified.toISOString()
+                    : null,
+            }));
+
+        bufferfiles.sort(
+            (a, b) =>
+                new Date(b.last_modified) - new Date(a.last_modified)
+        );
+
+        return res.status(200).json({ files, bufferfiles });
 
     } catch (err) {
         console.error("SeaweedFS List Error:", err);
@@ -85,7 +118,6 @@ const getFile = async (req, res) => {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
-                    // 'Content-Type' is set automatically when using URLSearchParams
                 },
             })
 
@@ -100,7 +132,7 @@ const getFile = async (req, res) => {
         try {
             // Create the command to get the specific object using its Key
             const command = new GetObjectCommand({
-                Bucket: process.env.S3_BUCKET_NAME_STAGE,
+                Bucket: process.env.SEAWEED_BUCKET,
                 Key: path, // Use the key, not the full URL
             });
 
@@ -129,11 +161,9 @@ const skipChunk = async (req, res) => {
 
         const response = await fetch(url, {
             method: "POST",
-
             headers: {
                 Authorization: `Bearer ${token}`,
             },
-
             body: formData,
         });
 
@@ -190,9 +220,6 @@ function broadcast(data) {
 
         } catch (err) {
             console.error("[STREAM] Client write failed, removing");
-
-    }, 1000 / 7); // ~10 FPS output
-
             clients.delete(client);
         }
     }
@@ -263,6 +290,84 @@ const resetStream = async (req, res) => {
     });
 };
 
+const initiate = async (req, res) => {
+    const { fileName, folderName } = req.body;
+
+    if (!fileName || !folderName) return res.status(401).end()
+
+    const s3Key = `${folderName}/${fileName}`;
+
+    const command = new CreateMultipartUploadCommand({ Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key });
+    const response = await s3.send(command);
+    res.json({ uploadId: response.UploadId, s3Key });
+}
+
+const presign = async (req, res) => {
+    const { s3Key, uploadId, partNumber } = req.body;
+
+    if (!s3Key || !uploadId || !partNumber) return res.status(401).end()
+
+    const command = new UploadPartCommand({
+        Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key, UploadId: uploadId, PartNumber: partNumber
+    });
+
+    const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    res.json({ presignedUrl });
+}
+
+const complete = async (req, res) => {
+    const { s3Key, uploadId, parts } = req.body;
+
+    if (!s3Key || !uploadId || !parts) return res.status(401).end()
+
+    const command = new CompleteMultipartUploadCommand({
+        Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key, UploadId: uploadId,
+        MultipartUpload: { Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber) }
+    });
+    await s3.send(command);
+    res.json({ success: true });
+}
+
+const compile = async (req, res) => {
+    const url = `${stage_ip}/compile`;
+    const { folder } = req.body;
+
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ folder })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Backend Error: ${errorText}`);
+            throw new Error(`Server responded with ${response.status}`);
+        }
+
+        const data = await response.json();
+        return res.status(200).json(data);
+
+    } catch (error) {
+        console.error("Error compiling:", error);
+        return res.status(500).json({ error: "Failed to compile" });
+    }
+};
+
+// console.log('posting to stage server')
+// fetch(`https://stage-api.randomwebserver.eu/compile`, {
+//     method: "POST",
+//     headers: {
+//         "Authorization": `Bearer ${token}`,
+//         "Content-Type": "application/json"
+//     },
+//     body: JSON.stringify({ folder: 'partUpload/raw - procent 263 - 1' })
+// }).then((res) => {
+//     console.log(res)
+// }) 
 
 
 module.exports = {
@@ -272,4 +377,8 @@ module.exports = {
     streamMeasurement,
     postFrame,
     resetStream,
+    initiate,
+    presign,
+    complete,
+    compile
 };
