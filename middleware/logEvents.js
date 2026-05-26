@@ -109,8 +109,8 @@ exports.logEvents = async function (req, options = {}) {
   );
 };
 
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received: flushing logs...');
-  await flushToS3();
-  process.exit(0);
-});
+// process.on('SIGTERM', async () => {
+//   console.log('SIGTERM received: flushing logs...');
+//   await flushToS3();
+//   process.exit(0);
+// });
