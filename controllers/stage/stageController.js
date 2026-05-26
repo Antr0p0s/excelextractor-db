@@ -23,6 +23,8 @@ const s3 = new S3Client({
         secretAccessKey: process.env.SEAWEED_SECRET_KEY,
     },
     forcePathStyle: true,
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 const clients = new Set();
@@ -305,6 +307,29 @@ const initiate = async (req, res) => {
 const presign = async (req, res) => {
     const { s3Key, uploadId, partNumber } = req.body;
 
+    if (!s3Key || !uploadId || !partNumber) return res.status(401).end();
+
+    try {
+        const command = new UploadPartCommand({
+            Bucket: process.env.SEAWEED_UPLOAD_BUCKET,
+            Key: s3Key,
+            UploadId: uploadId,
+            PartNumber: parseInt(partNumber, 10) // Ensure it's treated strictly as a number
+        });
+
+        // Generate the URL. We can pass an empty header rule configuration if your proxy forces it,
+        // but removing content-type checks during browser requests is safest.
+        const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+        res.json({ presignedUrl });
+    } catch (err) {
+        console.error("Presign generation error:", err);
+        res.status(500).json({ error: "Failed to generate presigned URL" });
+    }
+}
+
+const presignOld = async (req, res) => {
+    const { s3Key, uploadId, partNumber } = req.body;
+
     if (!s3Key || !uploadId || !partNumber) return res.status(401).end()
 
     const command = new UploadPartCommand({
@@ -357,18 +382,132 @@ const compile = async (req, res) => {
     }
 };
 
-// console.log('posting to stage server')
-// fetch(`https://stage-api.randomwebserver.eu/compile`, {
-//     method: "POST",
-//     headers: {
-//         "Authorization": `Bearer ${token}`,
-//         "Content-Type": "application/json"
-//     },
-//     body: JSON.stringify({ folder: 'partUpload/raw - procent 263 - 1' })
-// }).then((res) => {
-//     console.log(res)
-// }) 
+const Annotation = require('../../model/Annotation.js')
 
+const getFileMetaData = async (req, res) => {
+    const { filePath } = req.body;
+
+    if (!filePath) {
+        return res.status(400).json({ 'message': 'Missing required parameter: filePath' });
+    }
+
+    try {
+        // Find the record matching the exact file path string
+        const record = await Annotation.findOne({ filePath: filePath.trim() });
+
+        // If no records have been saved for this file yet, return an empty array
+        if (!record) {
+            return res.status(200).json([]);
+        }
+
+        // Return the array of annotation points stored inside the document
+        return res.status(200).json(record.annotations);
+
+    } catch (error) {
+        console.error(`Database error fetching annotations for ${filePath}:`, error);
+        return res.status(500).json({
+            'message': 'Internal server error accessing database registry',
+            'error': error.message
+        });
+    }
+};
+
+const putMetaData = async (req, res) => {
+    const { filePath, annotation } = req.body;
+
+    if (!filePath) {
+        return res.status(400).json({
+            message: 'Missing required parameter: filePath'
+        });
+    }
+
+    if (!annotation || typeof annotation !== 'object') {
+        return res.status(400).json({
+            message: 'Invalid payload: annotation must be a valid object'
+        });
+    }
+
+    try {
+        const updatedRecord = await Annotation.findOneAndUpdate(
+            { filePath: filePath.trim() },
+
+            {
+                $push: {
+                    annotations: annotation
+                }
+            },
+
+            {
+                new: true,
+                upsert: true,
+                runValidators: true
+            }
+        );
+
+        return res.status(200).json({
+            message: 'Annotation added successfully',
+            filePath: updatedRecord.filePath,
+            count: updatedRecord.annotations.length,
+            annotation
+        });
+
+    } catch (error) {
+        console.error(
+            `Database error writing annotation for ${filePath}:`,
+            error
+        );
+
+        return res.status(500).json({
+            message: 'Internal server error committing data updates',
+            error: error.message
+        });
+    }
+};
+
+const deleteMetaData = async (req, res) => {
+    const { filePath, annotationId } = req.body;
+
+    // 1. Validation: Ensure both parameters are present
+    if (!filePath || !annotationId) {
+        return res.status(400).json({
+            message: 'Missing required parameters: filePath and annotationId are required.'
+        });
+    }
+
+    try {
+        // 2. Use $pull to atomically remove the object with the matching id from the array
+        const updatedRecord = await Annotation.findOneAndUpdate(
+            { filePath: filePath.trim() },
+            {
+                $pull: {
+                    annotations: { id: annotationId }
+                }
+            },
+            { new: true } // Returns the document after the deletion is applied
+        );
+
+        // 3. Handle the case where the file path itself wasn't found in the database
+        if (!updatedRecord) {
+            return res.status(404).json({
+                message: 'No metadata record found for the provided filePath.'
+            });
+        }
+
+        // 4. Success response returning the remaining annotation count
+        return res.status(200).json({
+            message: 'Annotation removed successfully',
+            filePath: updatedRecord.filePath,
+            remainingCount: updatedRecord.annotations.length
+        });
+
+    } catch (error) {
+        console.error(`Database error deleting annotation ${annotationId} from ${filePath}:`, error);
+        return res.status(500).json({
+            message: 'Internal server error processing deletion request',
+            error: error.message
+        });
+    }
+};
 
 module.exports = {
     getFileNames,
@@ -380,5 +519,8 @@ module.exports = {
     initiate,
     presign,
     complete,
-    compile
+    compile,
+    getFileMetaData,
+    putMetaData,
+    deleteMetaData
 };

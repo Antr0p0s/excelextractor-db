@@ -7,6 +7,11 @@ const verifyRoles = require('../../middleware/verifyRoles');
 router.route('/filenames')
     .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.getFileNames)
 
+router.route('/filemetadata')
+    .post(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.getFileMetaData)
+    .put(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.putMetaData)
+    .delete(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.deleteMetaData)
+
 router.route('/file')
     .post(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.getFile)
 
