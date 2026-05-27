@@ -7,6 +7,7 @@ const AnnotationSchema = new mongoose.Schema({
     filePath: { type: String, required: true },
     x: { type: Number, required: true },    
     y: { type: Number, required: true },    
+    traceKey: { type: String, required: true },    
     axis_unit: { type: String, required: true },
     timestamp: { type: Number, default: () => Date.now() }
 });
