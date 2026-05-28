@@ -23,14 +23,13 @@ const s3 = new S3Client({
 
 const storage = multerS3({
     s3: s3,
-    bucket: process.env.SEAWEED_BUCKET,
-    acl: 'private',
+    bucket: process.env.SEAWEED_PUBQUIZ_BUCKET,
     metadata: (req, file, cb) => {
         cb(null, { fieldName: file.fieldname });
     },
     key: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, `pubquiz/${uniqueSuffix}-${file.originalname}`);
+        cb(null, `${uniqueSuffix}-${file.originalname}`);
     }
 });
 

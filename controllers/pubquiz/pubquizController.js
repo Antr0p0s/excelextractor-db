@@ -15,7 +15,7 @@ const s3 = new S3Client({
 });
 
 const generateQuizId = () => {
-    return 'devmodequizid'
+    // return 'devmodequizid'
     return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 

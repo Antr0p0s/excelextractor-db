@@ -335,7 +335,7 @@ const getFile = async (req, res) => {
 
         // Create the command to get the specific object using its Key
         const command = new GetObjectCommand({
-            Bucket: process.env.S3_BUCKET_NAME,
+            Bucket: process.env.SEAWEED_BUCKET,
             Key: question.media[type].key, // Use the key, not the full URL
         });
 
