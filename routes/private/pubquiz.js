@@ -29,7 +29,7 @@ const storage = multerS3({
     },
     key: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, `${uniqueSuffix}-${file.originalname}`);
+        cb(null, `pubquiz/${uniqueSuffix}-${file.originalname}`);
     }
 });
 
