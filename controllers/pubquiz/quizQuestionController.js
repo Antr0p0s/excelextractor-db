@@ -64,7 +64,7 @@ const deleteQuestion = async (req, res) => {
         if (question.media?.fileKey) {
             try {
                 const deleteCommand = new DeleteObjectCommand({
-                    Bucket: process.env.S3_BUCKET_NAME,
+                    Bucket: process.env.SEAWEED_BUCKET,
                     Key: question.media.fileKey,
                 });
 
