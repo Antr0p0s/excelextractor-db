@@ -88,6 +88,9 @@ router.route('/question/:id')
     .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), quizQuestionController.getSingleQuestion)
     .delete(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), quizQuestionController.deleteQuestion)
 
+router.route('/resetQuiz')
+    .delete(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), pubquizController.resetQuiz)
+
 router.route('/categories')
     .get(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), quizQuestionController.getCategories)
 
