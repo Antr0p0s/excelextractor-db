@@ -638,10 +638,6 @@ const showLeaderboard = async (req, res) => {
             leaderboard
         };
 
-        return res.status(200).json({
-            message: 'Leaderboard broadcast'
-        });
-
         quiz.connections.displays.forEach((conn) => {
             conn.write(`data: ${JSON.stringify(payload)}\n\n`);
         });
