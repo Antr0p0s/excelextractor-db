@@ -167,7 +167,7 @@ const streamQuiz = (req, res) => {
                         correctAnswer: question.correctAnswer || [],
                         currentlyLocked: question.currentlyLocked || false,
                         description: question.description || "",
-                        currentAnswers: question.data.answers[question._id],
+                        currentAnswers: question.data?.answers[question._id],
                         media: question.media || {}
                     }
                 }
