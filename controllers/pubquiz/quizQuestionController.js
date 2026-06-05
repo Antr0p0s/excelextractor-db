@@ -158,7 +158,7 @@ const createNewQuestion = async (req, res) => {
             media: media // Now contains all 4 potential files
         };
 
-        if (type === 'open' || type === 'bidding') {
+        if (type === 'open' || type === 'bidding' || type === 'guessing') {
             questionObject.defaultPoints = Number(defaultPoints) || 0;
             questionObject.correctAnswer = [correctAnswer];
         } else if (type === 'multiple') {
@@ -245,7 +245,7 @@ const editQuestion = async (req, res) => {
         // ----------------------------
         // TYPE LOGIC (same as createNewQuestion)
         // ----------------------------
-        if (type === "open" || type === "bidding") {
+        if (type === "open" || type === "bidding" || type === 'guessing') {
             foundQuestion.defaultPoints = Number(defaultPoints) || 0;
             foundQuestion.correctAnswer = correctAnswer ? [correctAnswer] : [];
             foundQuestion.options = undefined;
