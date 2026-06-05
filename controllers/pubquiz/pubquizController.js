@@ -110,6 +110,14 @@ const streamQuiz = (req, res) => {
         res.setHeader("Connection", "keep-alive");
         res.flushHeaders();
 
+        const allowedTypes = ['player', 'staff', 'displays'];
+
+        if (!allowedTypes.includes(connectionType)) {
+            return res.status(400).json({
+                message: 'Invalid connection type'
+            });
+        }
+
         // ✅ Store connection
         quiz.connections[connectionType].push(res);
 
@@ -143,8 +151,8 @@ const streamQuiz = (req, res) => {
                         currentlyLocked: question.currentlyLocked || false,
                         description: question.description || "",
                         media: {
-                            showFile: question.media.showFile,
-                            showAudio: question.media.showAudio
+                            showFile: question.media?.showFile,
+                            showAudio: question.media?.showAudio
                         }
                     }
                 }
@@ -159,7 +167,7 @@ const streamQuiz = (req, res) => {
                         correctAnswer: question.correctAnswer || [],
                         currentlyLocked: question.currentlyLocked || false,
                         description: question.description || "",
-                        currentAnswers: question.data.answers[question._id],
+                        currentAnswers: question.data?.answers[question._id],
                         media: question.media || {}
                     }
                 }
@@ -176,7 +184,12 @@ const streamQuiz = (req, res) => {
 
     } catch (err) {
         console.error("SSE error:", err);
-        return res.sendStatus(403); // Only send headers once
+
+        if (!res.headersSent) {
+            return res.sendStatus(403);
+        }
+
+        res.end();
     }
 };
 
@@ -205,22 +218,32 @@ const lockQuestion = async (req, res) => {
 
         // Send to displays
         quiz.connections.displays.forEach((res) => {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            safeWrite(res, payload)
         });
 
         // Optionally, also send to staff connections
         quiz.connections.staff.forEach((res) => {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            safeWrite(res, payload)
         });
 
         quiz.connections.player.forEach((res) => {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            safeWrite(res, payload)
         });
 
         res.status(200).json({ message: "Answer revealed to all displays" });
     } catch (err) {
         console.error("Error in showAnswer:", err);
         res.status(500).json({ message: "Server error" });
+    }
+};
+
+const safeWrite = (conn, payload) => {
+    try {
+        if (!conn.destroyed) {
+            conn.write(`data: ${JSON.stringify(payload)}\n\n`);
+        }
+    } catch (err) {
+        console.error(err);
     }
 };
 
