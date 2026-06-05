@@ -401,7 +401,7 @@ const setActiveQuestion = async (req, res) => {
 
 const submitAnswer = async (req, res) => {
     try {
-        const { quizId, questionId, answer } = req.body
+        let { quizId, questionId, answer } = req.body
         const quiz = Object.values(quizzes).find(q => q.quizId === quizId)
 
         if (!quiz) {
@@ -410,9 +410,15 @@ const submitAnswer = async (req, res) => {
 
         const currentAnswers = quiz.data.answers[questionId]
         if (currentAnswers.some(ca => ca.teamId === req.id)) {
-            if (quiz.data.currentQuestion.type === 'bidding') {
+            if (quiz.data.currentQuestion.type === 'bidding' || quiz.data.currentQuestion.type === 'guessing') {
                 if (currentAnswers.some(a => a.answer === answer)) return
             } else return res.status(409).json({ 'message': "You already submitted an answer" })
+        }
+
+        if (quiz.data.currentQuestion.type === 'guessing') {
+            answer = parseFloat(answer)
+
+            if (isNaN(answer)) return res.status(403).json('Invalid guess, must be a number')
         }
 
         const answerData = {
@@ -433,6 +439,8 @@ const submitAnswer = async (req, res) => {
         } else if (quiz.data.currentQuestion.type === 'open') {
             answerData.correctAnswer = quiz.data.currentQuestion.correctAnswer[0]
             answerData.recommendedPoints = quiz.data.currentQuestion.defaultPoints
+        } else if (quiz.data.currentQuestion.type === 'guessing') {
+            quiz.data.answers[questionId] = quiz.data.answers[questionId].filter(q => q.teamId !== req.id)
         }
 
         quiz.data.answers[questionId].push(answerData)
@@ -484,6 +492,11 @@ const submitAnswer = async (req, res) => {
             quiz.connections.staff.forEach((res) => {
                 res.write(`data: ${JSON.stringify(staffPayload)}\n\n`);
             });
+        } else if (quiz.data.currentQuestion.type === 'guessing') {
+            [...quiz.connections.displays, ...quiz.connections.staff].forEach((res) => {
+                res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            });
+            return res.status(200).json({ new_guess: answer })
         } else {
             [...quiz.connections.displays, ...quiz.connections.staff].forEach((res) => {
                 res.write(`data: ${JSON.stringify(payload)}\n\n`);
