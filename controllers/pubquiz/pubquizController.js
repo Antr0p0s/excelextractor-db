@@ -110,6 +110,14 @@ const streamQuiz = (req, res) => {
         res.setHeader("Connection", "keep-alive");
         res.flushHeaders();
 
+        const allowedTypes = ['player', 'staff', 'displays'];
+
+        if (!allowedTypes.includes(connectionType)) {
+            return res.status(400).json({
+                message: 'Invalid connection type'
+            });
+        }
+
         // ✅ Store connection
         quiz.connections[connectionType].push(res);
 
@@ -143,8 +151,8 @@ const streamQuiz = (req, res) => {
                         currentlyLocked: question.currentlyLocked || false,
                         description: question.description || "",
                         media: {
-                            showFile: question.media.showFile,
-                            showAudio: question.media.showAudio
+                            showFile: question.media?.showFile,
+                            showAudio: question.media?.showAudio
                         }
                     }
                 }
@@ -176,7 +184,12 @@ const streamQuiz = (req, res) => {
 
     } catch (err) {
         console.error("SSE error:", err);
-        return res.sendStatus(403); // Only send headers once
+
+        if (!res.headersSent) {
+            return res.sendStatus(403);
+        }
+
+        res.end();
     }
 };
 
@@ -205,22 +218,32 @@ const lockQuestion = async (req, res) => {
 
         // Send to displays
         quiz.connections.displays.forEach((res) => {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            safeWrite(res, payload)
         });
 
         // Optionally, also send to staff connections
         quiz.connections.staff.forEach((res) => {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            safeWrite(res, payload)
         });
 
         quiz.connections.player.forEach((res) => {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            safeWrite(res, payload)
         });
 
         res.status(200).json({ message: "Answer revealed to all displays" });
     } catch (err) {
         console.error("Error in showAnswer:", err);
         res.status(500).json({ message: "Server error" });
+    }
+};
+
+const safeWrite = (conn, payload) => {
+    try {
+        if (!conn.destroyed) {
+            conn.write(`data: ${JSON.stringify(payload)}\n\n`);
+        }
+    } catch (err) {
+        console.error(err);
     }
 };
 
@@ -356,47 +379,47 @@ const setActiveQuestion = async (req, res) => {
                     text: opt.text[lang],
                     points: opt.points,
                 })) || [],
-            correctAnswer: question.correctAnswer || [],
-            defaultPoints: question.defaultPoints,
-            description: question.description || "",
-            currentAnswers: quiz.data.answers[question._id],
-            currentlyLocked: question.currentlyLocked || false,
-            media: question.media || {}
-        }
-    };
+                correctAnswer: question.correctAnswer || [],
+                defaultPoints: question.defaultPoints,
+                description: question.description || "",
+                currentAnswers: quiz.data.answers[question._id],
+                currentlyLocked: question.currentlyLocked || false,
+                media: question.media || {}
+            }
+        };
 
-    // Broadcast to displays and staff
-    [...quiz.connections.displays, ...quiz.connections.staff].forEach((res) => {
-        res.write(`data: ${JSON.stringify(payload)}\n\n`);
-    });
+        // Broadcast to displays and staff
+        [...quiz.connections.displays, ...quiz.connections.staff].forEach((res) => {
+            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        });
 
-    const playerPayload = {
-        type: "QUESTION_UPDATE",
-        question: {
-            _id: question._id,
-            category: question.category,
-            type: question.type,
-            question: question.question.en || question.question,
-            options: question.options || [],
-            description: question.description || "",
-            currentlyLocked: question.currentlyLocked || false,
-            media: {
-                showFile: question.media?.showFile,
-                showAudio: question.media?.showAudio
+        const playerPayload = {
+            type: "QUESTION_UPDATE",
+            question: {
+                _id: question._id,
+                category: question.category,
+                type: question.type,
+                question: question.question.en || question.question,
+                options: question.options || [],
+                description: question.description || "",
+                currentlyLocked: question.currentlyLocked || false,
+                media: {
+                    showFile: question.media?.showFile,
+                    showAudio: question.media?.showAudio
+                }
             }
         }
+
+        quiz.connections.player.forEach((res) => {
+            res.write(`data: ${JSON.stringify(playerPayload)}\n\n`);
+        });
+
+        return res.status(200).json({ message: "Question activated", questionId });
+
+    } catch (err) {
+        console.error("setActiveQuestion error:", err);
+        return res.status(500).json({ message: "Internal server error" });
     }
-
-    quiz.connections.player.forEach((res) => {
-        res.write(`data: ${JSON.stringify(playerPayload)}\n\n`);
-    });
-
-    return res.status(200).json({ message: "Question activated", questionId });
-
-} catch (err) {
-    console.error("setActiveQuestion error:", err);
-    return res.status(500).json({ message: "Internal server error" });
-}
 };
 
 const submitAnswer = async (req, res) => {
@@ -411,7 +434,9 @@ const submitAnswer = async (req, res) => {
         const currentAnswers = quiz.data.answers[questionId]
         if (currentAnswers.some(ca => ca.teamId === req.id)) {
             if (quiz.data.currentQuestion.type === 'bidding') {
-                if (currentAnswers.some(a => a.answer === answer)) return
+                if (currentAnswers.some(a => a.answer === answer)) return res.status(409).json({
+                    message: "That bid already exists"
+                });
             } else return res.status(409).json({ 'message': "You already submitted an answer" })
         }
 
@@ -612,6 +637,10 @@ const showLeaderboard = async (req, res) => {
             type: "LEADERBOARD_UPDATE",
             leaderboard
         };
+
+        return res.status(200).json({
+            message: 'Leaderboard broadcast'
+        });
 
         quiz.connections.displays.forEach((conn) => {
             conn.write(`data: ${JSON.stringify(payload)}\n\n`);
