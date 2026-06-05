@@ -106,6 +106,9 @@ router.route('/quiz/stream')
 router.route('/quiz/answer')
     .post(verifyRoles(ROLES_LIST.QuizUser), pubquizController.submitAnswer)
 
+router.route('/quiz/checkquizid')
+    .post(verifyRoles(ROLES_LIST.QuizUser), pubquizController.checkQuiz)
+
 router.route('/quiz/judge-answer')
     .post(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), pubquizController.judgeAnswer)
 

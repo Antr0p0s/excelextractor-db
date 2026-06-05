@@ -668,6 +668,16 @@ const resetQuiz = async (req, res) => {
     }
 }
 
+const checkQuiz = async (req, res) => {
+    const { quizCode } = req.body
+    Object.values(quizzes).some(q => console.log(q))
+    if (Object.values(quizzes).some(q => q.quizId === quizCode)) {
+        res.status(200).json({ message: "Quiz found" });
+    } else {
+        res.status(404).json({ message: "Quiz not found" });
+    }
+}
+
 module.exports = {
     startQuiz,
     streamQuiz,
@@ -678,6 +688,7 @@ module.exports = {
     judgeAnswer,
     showLeaderboard,
     pauseAudio,
-    resetQuiz
+    resetQuiz,
+    checkQuiz
 }
 
