@@ -118,11 +118,6 @@ const streamQuiz = (req, res) => {
             });
         }
 
-        if (connectionType === 'player') {
-            quiz.connections.player =
-                quiz.connections.player.filter(conn => !conn.destroyed);
-        }
-
         // ✅ Store connection
         quiz.connections[connectionType].push(res);
 
