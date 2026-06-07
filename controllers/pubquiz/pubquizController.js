@@ -180,13 +180,28 @@ const streamQuiz = (req, res) => {
         }
 
         // ✅ Handle disconnect
+
         const cleanup = () => {
-            console.log(`${connectionType} disconnected`);
+            const before = quiz.connections[connectionType].length;
+
+            const found = quiz.connections[connectionType].includes(res);
+
+            console.log(
+                'DISCONNECT',
+                connectionType,
+                'found:',
+                found,
+                'before:',
+                before
+            );
 
             quiz.connections[connectionType] =
-                quiz.connections[connectionType].filter((c) => c !== res);
+                quiz.connections[connectionType].filter(c => c !== res);
 
-            sendStats(quiz);
+            console.log(
+                'after:',
+                quiz.connections[connectionType].length
+            );
         };
 
         res.on("close", cleanup);
