@@ -30,6 +30,7 @@ const startQuiz = async (req, res) => {
 
         quizzes[hostId] = {
             quizId,
+            lang: 'en',
             hostData: {
                 id: req.id,
                 name: req.user
@@ -370,13 +371,14 @@ const buildLeaderboard = (quiz) => {
 const setActiveQuestion = async (req, res) => {
     try {
         const hostId = req.id;
-        const { questionId } = req.body;
+        const { questionId, lang } = req.body;
 
         if (!quizzes[hostId]) {
             return res.status(404).json({ message: "Quiz not found" });
         }
 
         const quiz = quizzes[hostId];
+        quizzes[hostId].lang = lang
 
         // Fetch question from DB
         const question = await Question.findById(questionId).lean();
@@ -390,8 +392,6 @@ const setActiveQuestion = async (req, res) => {
         quiz.data.currentQuestion = question;
         quiz.data.answers[question._id] = []
 
-        const lang = 'en'
-
         // Prepare payload for SSE
         const payload = {
             type: "QUESTION_UPDATE",
@@ -399,7 +399,7 @@ const setActiveQuestion = async (req, res) => {
                 _id: question._id,
                 category: question.category,
                 type: question.type,
-                question: question.question.en || question.question,
+                question: question.question[lang] || question.question.en || question.question,
                 options: question.options?.map(opt => ({
                     text: opt.text[lang],
                     points: opt.points,
@@ -424,7 +424,7 @@ const setActiveQuestion = async (req, res) => {
                 _id: question._id,
                 category: question.category,
                 type: question.type,
-                question: question.question.en || question.question,
+                question: question.question[lang] || question.question.en || question.question,
                 options: question.options || [],
                 description: question.description || "",
                 currentlyLocked: question.currentlyLocked || false,
