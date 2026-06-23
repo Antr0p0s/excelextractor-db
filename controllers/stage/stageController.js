@@ -12,6 +12,7 @@ const {
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const stage_ip = process.env.STAGE_ADDRESS
+const stage_ip_files = process.env.STAGE_GRAPH_ADDRESS
 const token = process.env.STAGE_AUTH_KEY;
 
 const s3 = new S3Client({
@@ -114,7 +115,7 @@ const getFile = async (req, res) => {
     const { path } = req.body;
 
     if (path.endsWith('.npy')) {
-        const url = `${stage_ip}/get-npy-json?file_key=${path}`
+        const url = `${stage_ip_files}/get-npy-json?file_key=${path}`
         try {
             const response = await fetch(url, {
                 method: 'GET',
@@ -299,7 +300,7 @@ const initiate = async (req, res) => {
 
     const s3Key = `${folderName}/${fileName}`;
 
-    const command = new CreateMultipartUploadCommand({ Bucket: process.env.SEAWEED_BUCKET_2, Key: s3Key });
+    const command = new CreateMultipartUploadCommand({ Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key });
     const response = await s3.send(command);
     res.json({ uploadId: response.UploadId, s3Key });
 }
@@ -311,7 +312,7 @@ const presign = async (req, res) => {
 
     try {
         const command = new UploadPartCommand({
-            Bucket: process.env.SEAWEED_BUCKET_2,
+            Bucket: process.env.SEAWEED_UPLOAD_BUCKET,
             Key: s3Key,
             UploadId: uploadId,
             PartNumber: parseInt(partNumber, 10) // Ensure it's treated strictly as a number
@@ -333,7 +334,7 @@ const presignOld = async (req, res) => {
     if (!s3Key || !uploadId || !partNumber) return res.status(401).end()
 
     const command = new UploadPartCommand({
-        Bucket: process.env.SEAWEED_BUCKET_2, Key: s3Key, UploadId: uploadId, PartNumber: partNumber
+        Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key, UploadId: uploadId, PartNumber: partNumber
     });
 
     const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
@@ -346,7 +347,7 @@ const complete = async (req, res) => {
     if (!s3Key || !uploadId || !parts) return res.status(401).end()
 
     const command = new CompleteMultipartUploadCommand({
-        Bucket: process.env.SEAWEED_BUCKET_2, Key: s3Key, UploadId: uploadId,
+        Bucket: process.env.SEAWEED_UPLOAD_BUCKET, Key: s3Key, UploadId: uploadId,
         MultipartUpload: { Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber) }
     });
     await s3.send(command);
@@ -371,11 +372,11 @@ const compile = async (req, res) => {
             const errorText = await response.text();
             console.error(`Backend Error: ${errorText}`);
             throw new Error(`Server responded with ${response.status}`);
+            return res.status(500).json({ message: errorText });
+        } else {
+            const data = await response.json();
+            return res.status(200).json(data);
         }
-
-        const data = await response.json();
-        return res.status(200).json(data);
-
     } catch (error) {
         console.error("Error compiling:", error);
         return res.status(500).json({ error: "Failed to compile" });
