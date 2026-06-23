@@ -1,5 +1,7 @@
 const axios = require("axios");
 
+const Filename = require('../../model/Filename.js');
+
 const {
     S3Client,
     GetObjectCommand,
@@ -12,6 +14,7 @@ const {
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const stage_ip = process.env.STAGE_ADDRESS
+const stage_ip_files = process.env.STAGE_GRAPH_ADDRESS
 const token = process.env.STAGE_AUTH_KEY;
 
 const s3 = new S3Client({
@@ -95,7 +98,10 @@ const getFileNames = async (req, res) => {
                 new Date(b.last_modified) - new Date(a.last_modified)
         );
 
-        return res.status(200).json({ files, bufferfiles });
+        const nicknames = await Filename.find()
+            // .select("originalName displayName -_id");
+
+        return res.status(200).json({ files, bufferfiles, nicknames });
 
     } catch (err) {
         console.error("SeaweedFS List Error:", err);
@@ -114,7 +120,7 @@ const getFile = async (req, res) => {
     const { path } = req.body;
 
     if (path.endsWith('.npy')) {
-        const url = `${stage_ip}/get-npy-json?file_key=${path}`
+        const url = `${stage_ip_files}/get-npy-json?file_key=${path}`
         try {
             const response = await fetch(url, {
                 method: 'GET',
@@ -473,6 +479,50 @@ const deleteMetaData = async (req, res) => {
     }
 };
 
+const changeFileName = async (req, res) => {
+    try {
+        const { originalName, newName } = req.body;
+
+        if (!originalName || !newName) {
+            return res.status(400).json({
+                message: "originalName and newName are required"
+            });
+        }
+
+        const file = await Filename.findOne({
+            originalName
+        });
+
+        if (!file) {
+            const newFile = await Filename.create({
+                originalName,
+                displayName: newName
+            });
+
+            return res.status(201).json({
+                message: "Filename created",
+                file: newFile
+            });
+        }
+
+        file.displayName = newName;
+        await file.save();
+
+        return res.status(200).json({
+            message: "Display name updated",
+            file
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+            message: "Failed to change filename",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getFileNames,
     getFile,
@@ -486,5 +536,6 @@ module.exports = {
     compile,
     getFileMetaData,
     putMetaData,
-    deleteMetaData
+    deleteMetaData,
+    changeFileName
 };
