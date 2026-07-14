@@ -1,5 +1,7 @@
 const axios = require("axios");
 
+const Filename = require('../../model/Filename.js');
+
 const {
     S3Client,
     GetObjectCommand,
@@ -96,7 +98,10 @@ const getFileNames = async (req, res) => {
                 new Date(b.last_modified) - new Date(a.last_modified)
         );
 
-        return res.status(200).json({ files, bufferfiles });
+        const nicknames = await Filename.find()
+        // .select("originalName displayName -_id");
+
+        return res.status(200).json({ files, bufferfiles, nicknames });
 
     } catch (err) {
         console.error("SeaweedFS List Error:", err);
@@ -149,6 +154,92 @@ const getFile = async (req, res) => {
             console.error("Presigned URL Error:", err);
             res.status(500).json({ "message": "Could not authorize file access" });
         }
+    }
+};
+
+function jsonToTsv(data, meta) {
+    const keys = meta.keys.filter(k => k !== "timestamps");
+
+    let fileContent = "";
+
+    // Build header
+    const headers = ["Timestamp(s)"];
+
+    keys.forEach(key => {
+        const firstValue = data[key][0];
+
+        if (Array.isArray(firstValue)) {
+            firstValue.forEach((_, i) => {
+                headers.push(`${key} ${i + 1}`);
+            });
+        } else {
+            headers.push(key);
+        }
+    });
+
+    fileContent += headers.join("\t") + "\n";
+
+    // Build rows
+    for (let i = 0; i < meta.length; i++) {
+        const row = [];
+
+        row.push(data.timestamps[i]);
+
+        keys.forEach(key => {
+            const value = data[key][i];
+
+            if (Array.isArray(value)) {
+                value.forEach(v => row.push(v));
+            } else {
+                row.push(value);
+            }
+        });
+
+        fileContent += row.join("\t") + "\n";
+    }
+
+    return fileContent;
+}
+
+const getPythonFileAsTxt = async (req, res) => {
+    const { path } = req.body;
+
+    const url = `${stage_ip_files}/get-npy-json?file_key=${path}`;
+
+    try {
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+
+        const data = await response.json();
+
+        const jsonData = data.data
+        const metaData = data.meta
+
+        // Convert JSON to tab-separated text
+        const tsv = jsonToTsv(jsonData, metaData);
+
+        const filename = path
+            .replace('/', '-')
+            .replace('/', '-')
+            .replace(/\.\w+$/, ".txt");
+
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${filename.replace('npy', 'txt')}"`
+        );
+
+        return res.send(tsv);
+
+    } catch (err) {
+        console.error("Python fetch error:", err);
+        return res.status(500).json({
+            message: "Could not get python data",
+        });
     }
 };
 
@@ -474,6 +565,50 @@ const deleteMetaData = async (req, res) => {
     }
 };
 
+const changeFileName = async (req, res) => {
+    try {
+        const { originalName, newName } = req.body;
+
+        if (!originalName || !newName) {
+            return res.status(400).json({
+                message: "originalName and newName are required"
+            });
+        }
+
+        const file = await Filename.findOne({
+            originalName
+        });
+
+        if (!file) {
+            const newFile = await Filename.create({
+                originalName,
+                displayName: newName
+            });
+
+            return res.status(201).json({
+                message: "Filename created",
+                file: newFile
+            });
+        }
+
+        file.displayName = newName;
+        await file.save();
+
+        return res.status(200).json({
+            message: "Display name updated",
+            file
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+            message: "Failed to change filename",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getFileNames,
     getFile,
@@ -487,5 +622,7 @@ module.exports = {
     compile,
     getFileMetaData,
     putMetaData,
-    deleteMetaData
+    deleteMetaData,
+    changeFileName,
+    getPythonFileAsTxt
 };
