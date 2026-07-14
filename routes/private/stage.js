@@ -15,6 +15,9 @@ router.route('/filemetadata')
 router.route('/file')
     .post(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.getFile)
 
+router.route('/filetxt')
+    .post(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.getPythonFileAsTxt)
+
 router.route('/changefilename')
     .put(verifyRoles(ROLES_LIST.User, ROLES_LIST.Admin), stageController.changeFileName)
 
